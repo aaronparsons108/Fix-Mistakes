@@ -252,8 +252,10 @@ async function loadPuzzle(i, sweepText) {
   $('puzzle-context').innerHTML =
     `Move <strong>${m.moveNumber}</strong> vs <strong>${escapeHtml(g.opponent)}</strong>. ` +
     `In the game you played <span class="played-move">${escapeHtml(m.playedSan)}</span> — a ` +
-    `${m.severity} that cost you <strong>${(m.drop / 100).toFixed(1)}</strong> pawns of evaluation. ` +
-    `Find the move you should have played.`;
+    `${m.severity} that dropped your eval from ` +
+    `<strong>${formatEval(m.evalBest, m.mateBest, m.userColor)}</strong> to ` +
+    `<strong>${formatEval(m.evalAfterPlayed, m.mateAfterPlayed, m.userColor)}</strong> ` +
+    `(${(m.drop / 100).toFixed(1)} pawns). Find the move you should have played.`;
   $('turn-banner').textContent =
     `${m.userColor === 'w' ? 'WHITE' : 'BLACK'} TO MOVE — find the best move`;
   setFeedback('', '');
