@@ -257,8 +257,11 @@ async function loadPuzzle(i, sweepText) {
   $('turn-banner').textContent =
     `${m.userColor === 'w' ? 'WHITE' : 'BLACK'} TO MOVE — find the best move`;
   setFeedback('', '');
-  $('eval-readout').innerHTML =
-    `Stockfish's best move here holds an eval of <b>${formatEval(m.evalBest, m.mateBest, m.userColor)}</b>. Match it.`;
+  const bestUserCp = (m.userColor === 'w' ? 1 : -1) * m.evalBest;
+  const bestStr = formatEval(m.evalBest, m.mateBest, m.userColor);
+  $('eval-readout').innerHTML = bestUserCp < -150
+    ? `You were already behind here — even the best move only limits the damage at <b>${bestStr}</b>. Find the toughest defense.`
+    : `Stockfish's best move here holds an eval of <b>${bestStr}</b>. Match it.`;
   setButtons({ hint: true, idk: true });
   $('mini-thinking').hidden = true;
 
@@ -407,7 +410,8 @@ function judge(kind, m, uci, evalAfter) {
       `Great move! It keeps your position strong… but Stockfish found something even <b>stronger</b>. Can you spot it?`,
       'great'
     );
-    $('eval-readout').innerHTML = `Your move: <b>${you}</b> &nbsp;·&nbsp; Best move: <b>${best}</b>`;
+    $('eval-readout').innerHTML =
+    `Your move: <b>${you}</b> &nbsp;·&nbsp; Best move: <b>${best}</b> &nbsp;<i>(higher is better for you)</i>`;
     setButtons({ retry: true, accept: true, idk: true });
     return;
   }
@@ -429,7 +433,8 @@ function judge(kind, m, uci, evalAfter) {
       'bad'
     );
   }
-  $('eval-readout').innerHTML = `Your move: <b>${you}</b> &nbsp;·&nbsp; Best move: <b>${best}</b>`;
+  $('eval-readout').innerHTML =
+    `Your move: <b>${you}</b> &nbsp;·&nbsp; Best move: <b>${best}</b> &nbsp;<i>(higher is better for you)</i>`;
   state.stats.retries++;
   // brief pause so the player sees the consequence, then reset for the retry
   const session = state.session;
