@@ -1,0 +1,174 @@
+// Headless end-to-end test: serves the site, mocks the chess.com API, and
+// drives the full flow — landing → game picker → real Stockfish analysis in a
+// Worker → quiz (best move, wrong move + retry, "I don't know") → summary.
+//   node test/e2e.mjs
+// Requires playwright (+ chromium) installed locally or globally.
+
+import { createRequire } from 'module';
+import { spawn } from 'child_process';
+import { mkdirSync } from 'fs';
+
+const require = createRequire(import.meta.url);
+let chromium;
+try {
+  ({ chromium } = require('playwright'));
+} catch {
+  ({ chromium } = require('/opt/node22/lib/node_modules/playwright'));
+}
+
+const PORT = 8123;
+const SHOTS = new URL('./shots/', import.meta.url).pathname;
+mkdirSync(SHOTS, { recursive: true });
+
+const PGN = `[Event "Live Chess"]
+[Site "Chess.com"]
+[White "testuser"]
+[Black "trickster"]
+[Result "0-1"]
+
+1. e4 {[%clk 0:09:58]} e5 {[%clk 0:09:57]} 2. Nf3 Nc6 3. Bc4 Nd4 4. Nxe5 Qg5
+5. Nxf7 Qxg2 6. Rf1 Qxe4+ 7. Be2 Nf3# 0-1`;
+
+const FIXTURES = {
+  '/pub/player/testuser': { username: 'testuser', player_id: 1 },
+  '/pub/player/testuser/games/archives': {
+    archives: ['https://api.chess.com/pub/player/testuser/games/2026/06'],
+  },
+  '/pub/player/testuser/games/2026/06': {
+    games: [{
+      url: 'https://www.chess.com/game/live/1',
+      pgn: PGN,
+      time_class: 'blitz',
+      rated: true,
+      rules: 'chess',
+      end_time: 1750000000,
+      white: { username: 'testuser', rating: 812, result: 'checkmated' },
+      black: { username: 'trickster', rating: 945, result: 'win' },
+    }],
+  },
+};
+
+function clickSquare(page, board, sq) {
+  // white orientation: a1 bottom-left
+  return board.boundingBox().then((bb) => {
+    const f = sq.charCodeAt(0) - 97;
+    const r = 8 - parseInt(sq[1], 10);
+    return page.mouse.click(bb.x + ((f + 0.5) / 8) * bb.width, bb.y + ((r + 0.5) / 8) * bb.height);
+  });
+}
+
+const server = spawn('npx', ['http-server', '-p', String(PORT), '-s'], { stdio: 'ignore' });
+const errors = [];
+let failed = false;
+const check = (cond, label) => {
+  console.log(`${cond ? 'PASS' : 'FAIL'}: ${label}`);
+  if (!cond) failed = true;
+};
+
+try {
+  await new Promise((r) => setTimeout(r, 1500));
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1380, height: 900 } });
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+
+  await page.route('**/api.chess.com/**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const body = FIXTURES[path];
+    if (body) route.fulfill({ json: body, headers: { 'access-control-allow-origin': '*' } });
+    else route.fulfill({ status: 404, json: { message: 'not found' } });
+  });
+  // fonts are non-essential; don't let them stall the test
+  await page.route('**/fonts.googleapis.com/**', (r) =>
+    r.fulfill({ contentType: 'text/css', body: '' }));
+
+  await page.goto(`http://127.0.0.1:${PORT}/`);
+  await page.screenshot({ path: SHOTS + '1-landing.png' });
+
+  await page.fill('#username-input', 'testuser');
+  await page.click('#btn-analyze');
+  await page.waitForSelector('#screen-games.active', { timeout: 15000 });
+  await page.waitForSelector('.game-card');
+  await page.screenshot({ path: SHOTS + '2-games.png' });
+  check(true, 'game picker shows fetched losses');
+
+  await page.click('.game-card');
+  await page.waitForSelector('#screen-loading.active', { timeout: 10000 });
+  await page.screenshot({ path: SHOTS + '3-loading.png' });
+
+  // real Stockfish analysis in the worker
+  await page.waitForSelector('#screen-quiz.active', { timeout: 120000 });
+  check(true, 'analysis completed and quiz started');
+  await page.waitForTimeout(1800); // opponent's previous move animates in
+  await page.screenshot({ path: SHOTS + '4-quiz.png' });
+
+  const board = page.locator('#board');
+
+  // Puzzle 1: best move is Nxd4 (f3 -> d4)
+  await clickSquare(page, board, 'f3');
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: SHOTS + '5-selected.png' });
+  await clickSquare(page, board, 'd4');
+  await page.waitForSelector('.feedback.ok', { timeout: 30000 });
+  const fb1 = await page.textContent('#feedback');
+  check(/Stockfish would play/.test(fb1), `best move recognized ("${fb1.slice(0, 60)}…")`);
+  await page.screenshot({ path: SHOTS + '6-correct.png' });
+
+  // auto-advance to puzzle 2 of N (N depends on engine depth)
+  const total = parseInt((await page.textContent('#puzzle-counter')).match(/\/\s*(\d+)/)[1], 10);
+  console.log(`     (analysis found ${total} critical moments)`);
+  await page.waitForFunction(
+    () => document.getElementById('puzzle-counter').textContent.includes('2 /'),
+    { timeout: 20000 }
+  );
+  await page.waitForTimeout(1800);
+
+  // Puzzle 2: deliberately play a bad move (a2-a3), expect retry flow
+  await clickSquare(page, board, 'a2');
+  await page.waitForTimeout(250);
+  await clickSquare(page, board, 'a3');
+  await page.waitForSelector('.feedback.bad', { timeout: 30000 });
+  check(true, 'bad move detected, retry offered');
+  await page.screenshot({ path: SHOTS + '7-wrong.png' });
+  await page.waitForTimeout(1700); // board auto-resets
+
+  // give up: "I don't know" should reveal Bxf7+ and advance
+  await page.click('#btn-idk');
+  await page.waitForSelector('.feedback.info', { timeout: 15000 });
+  const fb2 = await page.textContent('#feedback');
+  check(/Bxf7\+/.test(fb2), `reveal shows the best move ("${fb2.slice(0, 60)}…")`);
+  await page.screenshot({ path: SHOTS + '8-reveal.png' });
+
+  // burn through any remaining puzzles with "I don't know"
+  for (let p = 3; p <= total; p++) {
+    await page.waitForFunction(
+      (n) => document.getElementById('puzzle-counter').textContent.includes(`${n} /`),
+      p, { timeout: 20000 }
+    );
+    await page.waitForTimeout(1800);
+    await page.click('#btn-idk');
+    await page.waitForSelector('.feedback.info', { timeout: 15000 });
+  }
+
+  await page.waitForSelector('#screen-summary.active', { timeout: 20000 });
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: SHOTS + '9-summary.png' });
+  const summary = await page.textContent('#stats-row');
+  check(/1/.test(summary), 'summary shows stats');
+
+  await browser.close();
+} catch (e) {
+  failed = true;
+  console.error('E2E FAILED:', e.message);
+} finally {
+  server.kill();
+}
+
+const realErrors = errors.filter((e) => !/favicon|fonts/.test(e));
+if (realErrors.length) {
+  failed = true;
+  console.log('Browser errors:');
+  realErrors.forEach((e) => console.log('  ' + e));
+}
+console.log(failed ? 'E2E: FAILED' : 'E2E: ALL CHECKS PASSED');
+process.exit(failed ? 1 : 0);

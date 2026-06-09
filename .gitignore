@@ -1,0 +1,3 @@
+node_modules/
+test/shots/*
+!test/shots/1-landing.png
