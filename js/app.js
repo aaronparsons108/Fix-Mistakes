@@ -249,13 +249,18 @@ async function loadPuzzle(i, sweepText) {
   $('board-meta-bottom').textContent = `${state.username} (${g.userRating ?? '?'}) — you`;
 
   renderCounter();
+  const fromStr = formatEval(m.evalBest, m.mateBest, m.userColor);
+  const toStr = formatEval(m.evalAfterPlayed, m.mateAfterPlayed, m.userColor);
+  // derive the drop from the rounded values so the arithmetic visibly adds up
+  const dropStr = m.mateBest == null && m.mateAfterPlayed == null
+    ? (parseFloat(fromStr) - parseFloat(toStr)).toFixed(1)
+    : (m.drop / 100).toFixed(1);
   $('puzzle-context').innerHTML =
     `Move <strong>${m.moveNumber}</strong> vs <strong>${escapeHtml(g.opponent)}</strong>. ` +
     `In the game you played <span class="played-move">${escapeHtml(m.playedSan)}</span> — a ` +
     `${m.severity} that dropped your eval from ` +
-    `<strong>${formatEval(m.evalBest, m.mateBest, m.userColor)}</strong> to ` +
-    `<strong>${formatEval(m.evalAfterPlayed, m.mateAfterPlayed, m.userColor)}</strong> ` +
-    `(${(m.drop / 100).toFixed(1)} pawns). Find the move you should have played.`;
+    `<strong>${fromStr}</strong> to <strong>${toStr}</strong> ` +
+    `(${dropStr} pawns). Find the move you should have played.`;
   $('turn-banner').textContent =
     `${m.userColor === 'w' ? 'WHITE' : 'BLACK'} TO MOVE — find the best move`;
   setFeedback('', '');
