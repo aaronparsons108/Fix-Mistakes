@@ -114,14 +114,15 @@ try {
   check(/Stockfish would play/.test(fb1), `best move recognized ("${fb1.slice(0, 60)}…")`);
   await page.screenshot({ path: SHOTS + '6-correct.png' });
 
-  // auto-advance to puzzle 2 of N (N depends on engine depth)
+  // advance to puzzle 2 of N via the Next button (no auto-advance)
   const total = parseInt((await page.textContent('#puzzle-counter')).match(/\/\s*(\d+)/)[1], 10);
   console.log(`     (analysis found ${total} critical moments)`);
+  await page.keyboard.press('ArrowRight'); // → advances like the Next button
   await page.waitForFunction(
     () => document.getElementById('puzzle-counter').textContent.includes('2 /'),
     { timeout: 20000 }
   );
-  await page.waitForTimeout(1800);
+  await page.waitForTimeout(2500);
 
   // Puzzle 2: deliberately play a bad move (a2-a3), expect retry flow
   await clickSquare(page, board, 'a2');
@@ -130,7 +131,8 @@ try {
   await page.waitForSelector('.feedback.bad', { timeout: 30000 });
   check(true, 'bad move detected, retry offered');
   await page.screenshot({ path: SHOTS + '7-wrong.png' });
-  await page.waitForTimeout(1700); // board auto-resets
+  await page.keyboard.press('ArrowLeft'); // ← resets immediately for another try
+  await page.waitForTimeout(600);
 
   // give up: "I don't know" should reveal Bxf7+ and advance
   await page.click('#btn-idk');
@@ -138,6 +140,7 @@ try {
   const fb2 = await page.textContent('#feedback');
   check(/Bxf7\+/.test(fb2), `reveal shows the best move ("${fb2.slice(0, 60)}…")`);
   await page.screenshot({ path: SHOTS + '8-reveal.png' });
+  await page.click('#btn-next');
 
   // burn through any remaining puzzles with "I don't know"
   for (let p = 3; p <= total; p++) {
@@ -145,9 +148,10 @@ try {
       (n) => document.getElementById('puzzle-counter').textContent.includes(`${n} /`),
       p, { timeout: 20000 }
     );
-    await page.waitForTimeout(1800);
+    await page.waitForTimeout(2500);
     await page.click('#btn-idk');
     await page.waitForSelector('.feedback.info', { timeout: 15000 });
+    await page.click('#btn-next');
   }
 
   await page.waitForSelector('#screen-summary.active', { timeout: 20000 });

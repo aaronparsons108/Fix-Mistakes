@@ -15,15 +15,20 @@ played.
    your browser — nothing is uploaded anywhere) evaluates every position
    while a pawn bounces through its promotion forms.
 3. **Replay your critical moments.** For each blunder, the board rewinds to
-   just before your mistake, replays your opponent's last move, and asks you
-   to find the best move:
-   - **Best move** → gold/green particle burst, auto-advance to the next moment.
-   - **Great move** → praised, but you can retry to find the even-stronger
-     move (or keep it and move on).
-   - **Anything else** → red burst, board shakes and resets — try again.
+   just before your mistake, replays your opponent's last move, shows you the
+   eval the best move would hold, and asks you to find it:
+   - **Best move** → gold/green particle burst; click **Next** (or press →)
+     when you're ready to move on.
+   - **Great move** (within ~0.8 pawns of best) → gold burst and praise, but
+     you can retry to find the even-stronger move (or keep it and move on).
+   - **Reasonable move** (within ~1.6 pawns) → orange burst — it doesn't lose,
+     but it lets the advantage slip. Try again.
+   - **Anything worse** → red burst, board shakes and resets — try again.
      You always get to retry until you find the best move.
-   - **🤷 I don't know** → Stockfish shows the answer, then moves on.
+   - **🤷 I don't know** → Stockfish shows the answer.
    - **💡 Hint** → highlights the piece that wants to move.
+   - **Keyboard:** ← resets the position for another try, → advances when
+     Next is available.
 4. **Session summary** — first-try solves, retries, reveals, and a rank from
    *Blunder Apprentice* to *Silicon Grandmaster*. Confetti included.
 

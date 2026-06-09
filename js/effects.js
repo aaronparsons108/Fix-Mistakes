@@ -7,6 +7,7 @@ const fxLayer = () => document.getElementById('fx-layer');
 const PALETTES = {
   ok:    ['#3dff8f', '#a8ffce', '#ffc83d', '#ffffff'],
   great: ['#ffc83d', '#ffe9a8', '#ff9d2e', '#ffffff'],
+  warn:  ['#ff9d2e', '#ffbd6e', '#ff7a2e', '#ffe2c4'],
   bad:   ['#ff4d6a', '#ff8fa1', '#ff2e2e', '#ffb199'],
   info:  ['#00e5ff', '#8ff4ff', '#7c5cff', '#ffffff'],
 };
@@ -83,8 +84,8 @@ export function sweep(label = '') {
     el.classList.remove('run');
     void el.offsetWidth;
     el.classList.add('run');
-    setTimeout(resolve, 480); // covered point of the 1.15s animation
-    setTimeout(() => el.classList.remove('run'), 1200);
+    setTimeout(resolve, 600); // covered point of the 2s animation
+    setTimeout(() => el.classList.remove('run'), 2050);
   });
 }
 

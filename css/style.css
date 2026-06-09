@@ -10,6 +10,7 @@
   --cyan: #00e5ff;
   --magenta: #ff2ec4;
   --gold: #ffc83d;
+  --orange: #ff9d2e;
   --green: #3dff8f;
   --red: #ff4d6a;
   --text: #eae6ff;
@@ -416,6 +417,7 @@ body {
 .feedback { min-height: 56px; font-size: 19px; font-weight: 600; line-height: 1.4; transition: opacity .25s; }
 .feedback.ok { color: var(--green); }
 .feedback.great { color: var(--gold); }
+.feedback.warn { color: var(--orange); }
 .feedback.bad { color: var(--red); }
 .feedback.info { color: var(--cyan); }
 
@@ -423,6 +425,7 @@ body {
 .eval-readout b { color: var(--text); }
 
 .quiz-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.key-hint { color: var(--text-dim); opacity: .7; font-size: 14px; letter-spacing: 1px; }
 .mini-thinking { color: var(--text-dim); font-size: 16px; display: flex; align-items: center; gap: 10px; }
 .mini-pawn { display: inline-block; animation: miniHop .7s infinite; color: var(--cyan); font-size: 20px; }
 @keyframes miniHop { 50% { transform: translateY(-6px); } }
@@ -459,11 +462,11 @@ body {
   clip-path: polygon(0 0, 0 0, -20% 100%, -20% 100%);
   visibility: hidden;
 }
-.sweep.run { visibility: visible; animation: sweepAcross 1.15s cubic-bezier(.7,0,.3,1) forwards; }
+.sweep.run { visibility: visible; animation: sweepAcross 2s cubic-bezier(.7,0,.3,1) forwards; }
 @keyframes sweepAcross {
   0%   { clip-path: polygon(0 0, 0 0, -20% 100%, -20% 100%); }
-  38%  { clip-path: polygon(0 0, 120% 0, 100% 100%, -20% 100%); }
-  62%  { clip-path: polygon(0 0, 120% 0, 100% 100%, -20% 100%); }
+  26%  { clip-path: polygon(0 0, 120% 0, 100% 100%, -20% 100%); }
+  74%  { clip-path: polygon(0 0, 120% 0, 100% 100%, -20% 100%); }
   100% { clip-path: polygon(120% 0, 120% 0, 100% 100%, 100% 100%); }
 }
 .sweep::before {
@@ -477,11 +480,11 @@ body {
   color: var(--text); text-shadow: 0 0 24px var(--cyan);
   opacity: 0; padding: 0 20px;
 }
-.sweep.run .sweep-label { animation: labelPop 1.15s ease forwards; }
+.sweep.run .sweep-label { animation: labelPop 2s ease forwards; }
 @keyframes labelPop {
-  0%, 30% { opacity: 0; transform: scale(.8); }
-  45%, 60% { opacity: 1; transform: scale(1); }
-  75%, 100% { opacity: 0; transform: scale(1.1); }
+  0%, 14% { opacity: 0; transform: scale(.8); }
+  26%, 72% { opacity: 1; transform: scale(1); }
+  86%, 100% { opacity: 0; transform: scale(1.1); }
 }
 
 /* ── fx layer (particles) ────────────────────────────── */
@@ -499,6 +502,7 @@ body {
 }
 .float-label.ok { color: var(--green); text-shadow: 0 0 18px var(--green); }
 .float-label.great { color: var(--gold); text-shadow: 0 0 18px var(--gold); }
+.float-label.warn { color: var(--orange); text-shadow: 0 0 18px var(--orange); }
 .float-label.bad { color: var(--red); text-shadow: 0 0 18px var(--red); }
 .float-label.info { color: var(--cyan); text-shadow: 0 0 18px var(--cyan); }
 @keyframes labelFloat {

@@ -257,7 +257,8 @@ async function loadPuzzle(i, sweepText) {
   $('turn-banner').textContent =
     `${m.userColor === 'w' ? 'WHITE' : 'BLACK'} TO MOVE — find the best move`;
   setFeedback('', '');
-  $('eval-readout').textContent = '';
+  $('eval-readout').innerHTML =
+    `Stockfish's best move here holds an eval of <b>${formatEval(m.evalBest, m.mateBest, m.userColor)}</b>. Match it.`;
   setButtons({ hint: true, idk: true });
   $('mini-thinking').hidden = true;
 
@@ -395,7 +396,6 @@ function judge(kind, m, uci, evalAfter) {
     );
     $('eval-readout').innerHTML = `Position eval: <b>${best}</b> — edge preserved.`;
     setButtons({ next: true });
-    autoAdvance(2400);
     return;
   }
 
@@ -413,9 +413,10 @@ function judge(kind, m, uci, evalAfter) {
   }
 
   if (kind === 'good') {
-    burst(x, y, 'info', { particles: 14, power: 0.7 });
+    burst(x, y, 'warn', { particles: 16, power: 0.75 });
+    floatLabel(x, y, 'REASONABLE', 'warn');
     sounds.wrong();
-    setFeedback(`Reasonable — but it lets the advantage slip. There's a better move here.`, 'bad');
+    setFeedback(`Reasonable — but it lets the advantage slip. There's a better move here.`, 'warn');
   } else {
     burst(x, y, 'bad');
     floatLabel(x, y, sameAsGame ? 'DÉJÀ VU…' : 'NOT THIS', 'bad');
@@ -436,17 +437,14 @@ function judge(kind, m, uci, evalAfter) {
 }
 
 function resetPuzzlePosition() {
+  state.session++; // cancels pending reset timers and discards in-flight engine verdicts
+  $('mini-thinking').hidden = true;
   const m = state.moments[state.idx];
   state.quiz = new Chess(m.fen);
   board.setPosition(m.fen);
   restoreHighlights(m);
   setButtons({ hint: !state.hintUsed, idk: true });
   state.locked = false;
-}
-
-function autoAdvance(ms) {
-  const session = state.session;
-  setTimeout(() => { if (session === state.session) nextPuzzle(); }, ms);
 }
 
 function nextPuzzle() {
@@ -501,10 +499,22 @@ $('btn-idk').addEventListener('click', async () => {
     'info'
   );
   setButtons({ next: true });
-  autoAdvance(3400);
 });
 
 $('btn-retry').addEventListener('click', () => { sounds.tick(); resetPuzzlePosition(); });
+
+// ← resets the position for another try; → advances when Next is available
+document.addEventListener('keydown', (e) => {
+  if (!$('screen-quiz').classList.contains('active') || !state.quiz) return;
+  if (e.key === 'ArrowLeft') {
+    if (state.results[state.idx] == null) {
+      sounds.tick();
+      resetPuzzlePosition();
+    }
+  } else if (e.key === 'ArrowRight') {
+    if (!$('btn-next').hidden) $('btn-next').click();
+  }
+});
 
 $('btn-accept').addEventListener('click', () => {
   state.results[state.idx] = 'accepted';
