@@ -130,6 +130,11 @@ try {
   await clickSquare(page, board, 'a3');
   await page.waitForSelector('.feedback.bad', { timeout: 30000 });
   check(true, 'bad move detected, retry offered');
+  const youBar = await page.evaluate(() => {
+    const bar = document.querySelector('[data-bar="you"]');
+    return { width: parseFloat(bar.style.width), val: document.querySelector('[data-val="you"]').textContent };
+  });
+  check(youBar.width > 0 && youBar.val !== '—', `eval graph shows the attempt (width ${youBar.width}%, ${youBar.val})`);
   await page.screenshot({ path: SHOTS + '7-wrong.png' });
   await page.keyboard.press('ArrowLeft'); // ← resets immediately for another try
   await page.waitForTimeout(600);

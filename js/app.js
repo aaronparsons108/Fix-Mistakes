@@ -264,6 +264,7 @@ async function loadPuzzle(i, sweepText) {
   $('eval-readout').innerHTML = bestUserCp < -150
     ? `You were already behind here — even the best move only limits the damage at <b>${bestStr}</b>. Find the toughest defense.`
     : `Stockfish's best move here holds an eval of <b>${bestStr}</b>. Match it.`;
+  showEvalGraph(m);
   setButtons({ hint: true, idk: true });
   $('mini-thinking').hidden = true;
 
@@ -313,6 +314,54 @@ function renderCounter() {
   }).join('');
   $('puzzle-counter').innerHTML =
     `CRITICAL MOMENT ${state.idx + 1} / ${state.moments.length} <span class="pips">${pips}</span>`;
+}
+
+/* Eval comparison graph: BEST / YOURS / GAME bars on a shared scale around a
+   zero line. Evals are shown from the player's perspective (right = good). */
+
+function userCp(m, score) {
+  const sign = m.userColor === 'w' ? 1 : -1;
+  return Math.max(-990, Math.min(990, score * sign)); // mate scores clamp to the edge
+}
+
+function showEvalGraph(m) {
+  const bestCp = userCp(m, m.evalBest);
+  const gameCp = userCp(m, m.evalAfterPlayed);
+  state.graphLimit = Math.max(Math.abs(bestCp), Math.abs(gameCp), 300) * 1.15;
+
+  const row = (label, key, val) => `
+    <div class="eg-row">
+      <span class="eg-label">${label}</span>
+      <div class="eg-track"><div class="eg-zero"></div>
+        <div class="eg-bar ${key}" data-bar="${key}" style="left:50%;width:0%"></div></div>
+      <span class="eg-val" data-val="${key}">${val}</span>
+    </div>`;
+  const g = $('eval-graph');
+  g.innerHTML =
+    row('BEST', 'best', formatEval(m.evalBest, m.mateBest, m.userColor)) +
+    row('YOURS', 'you', '—') +
+    row('GAME', 'game', formatEval(m.evalAfterPlayed, m.mateAfterPlayed, m.userColor)) +
+    '<div class="eg-axis"><span>← worse for you</span><span>better for you →</span></div>';
+  g.hidden = false;
+  requestAnimationFrame(() => {
+    setGraphBar('best', bestCp);
+    setGraphBar('game', gameCp);
+  });
+}
+
+function setGraphBar(key, cp, str, cls) {
+  const g = $('eval-graph');
+  const bar = g.querySelector(`[data-bar="${key}"]`);
+  const val = g.querySelector(`[data-val="${key}"]`);
+  if (!bar) return;
+  const pct = Math.min(Math.abs(cp) / state.graphLimit, 1) * 50;
+  bar.style.width = pct + '%';
+  bar.style.left = cp >= 0 ? '50%' : 50 - pct + '%';
+  if (str !== undefined) val.textContent = str;
+  if (cls) {
+    bar.className = `eg-bar ${key} ${cls}`;
+    val.className = `eg-val ${cls}`;
+  }
 }
 
 function setFeedback(html, cls) {
@@ -386,6 +435,8 @@ function judge(kind, m, uci, evalAfter) {
   const you = formatEval(evalAfter.score, evalAfter.mateIn, m.userColor);
   const best = formatEval(m.evalBest, m.mateBest, m.userColor);
   const sameAsGame = uci === m.playedUci;
+  const youCls = kind === 'best' ? 'ok' : kind === 'great' ? 'great' : kind === 'good' ? 'warn' : 'bad';
+  setGraphBar('you', userCp(m, evalAfter.score), you, youCls);
 
   if (kind === 'best') {
     burst(x, y, 'ok', { power: 1.3 });
@@ -412,9 +463,7 @@ function judge(kind, m, uci, evalAfter) {
       `Great move! It keeps your position strong… but Stockfish found something even <b>stronger</b>. Can you spot it?`,
       'great'
     );
-    $('eval-readout').innerHTML =
-    `Your move: <b>${you}</b> &nbsp;·&nbsp; Best move: <b>${best}</b> &nbsp;<i>(higher is better for you)</i>`;
-    setButtons({ retry: true, accept: true, idk: true });
+      setButtons({ retry: true, accept: true, idk: true });
     return;
   }
 
@@ -435,8 +484,6 @@ function judge(kind, m, uci, evalAfter) {
       'bad'
     );
   }
-  $('eval-readout').innerHTML =
-    `Your move: <b>${you}</b> &nbsp;·&nbsp; Best move: <b>${best}</b> &nbsp;<i>(higher is better for you)</i>`;
   state.stats.retries++;
   // brief pause so the player sees the consequence, then reset for the retry
   const session = state.session;

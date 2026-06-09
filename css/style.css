@@ -424,6 +424,43 @@ body {
 .eval-readout { color: var(--text-dim); font-size: 16px; font-weight: 600; min-height: 22px; }
 .eval-readout b { color: var(--text); }
 
+/* ── eval comparison graph ───────────────────────────── */
+.eval-graph { display: flex; flex-direction: column; gap: 9px; }
+.eg-row { display: grid; grid-template-columns: 54px 1fr 58px; align-items: center; gap: 10px; }
+.eg-label {
+  font-family: var(--font-display); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.5px; color: var(--text-dim); text-align: right;
+}
+.eg-track {
+  position: relative; height: 16px; border-radius: 99px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--panel-edge);
+}
+.eg-zero {
+  position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px;
+  background: rgba(255,255,255,0.4); border-radius: 2px;
+}
+.eg-bar {
+  position: absolute; top: 3px; bottom: 3px; border-radius: 99px;
+  transition: left .7s cubic-bezier(.2,.9,.3,1), width .7s cubic-bezier(.2,.9,.3,1);
+}
+.eg-bar.best { background: linear-gradient(90deg, #19c97c, var(--green)); box-shadow: 0 0 10px rgba(61,255,143,.5); }
+.eg-bar.game { background: var(--red); opacity: .7; box-shadow: 0 0 8px rgba(255,77,106,.4); }
+.eg-bar.you  { background: var(--text-dim); }
+.eg-bar.you.ok    { background: linear-gradient(90deg, #19c97c, var(--green)); box-shadow: 0 0 10px rgba(61,255,143,.6); }
+.eg-bar.you.great { background: linear-gradient(90deg, #ff9d2e, var(--gold)); box-shadow: 0 0 10px rgba(255,200,61,.6); }
+.eg-bar.you.warn  { background: var(--orange); box-shadow: 0 0 10px rgba(255,157,46,.5); }
+.eg-bar.you.bad   { background: var(--red); box-shadow: 0 0 10px rgba(255,77,106,.5); }
+.eg-val { font-weight: 700; font-size: 15px; color: var(--text); white-space: nowrap; }
+.eg-val.ok { color: var(--green); }
+.eg-val.great { color: var(--gold); }
+.eg-val.warn { color: var(--orange); }
+.eg-val.bad { color: var(--red); }
+.eg-axis {
+  display: flex; justify-content: space-between;
+  font-size: 13px; color: var(--text-dim); letter-spacing: .5px;
+  padding: 0 58px 0 64px;
+}
+
 .quiz-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .key-hint { color: var(--text-dim); opacity: .7; font-size: 14px; letter-spacing: 1px; }
 .mini-thinking { color: var(--text-dim); font-size: 16px; display: flex; align-items: center; gap: 10px; }
