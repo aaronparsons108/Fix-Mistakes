@@ -103,6 +103,7 @@ try {
   await page.screenshot({ path: SHOTS + '4-quiz.png' });
 
   const board = page.locator('#board');
+  check(await page.locator('.board-arrow.played').count() === 1, 'red arrow marks the game move');
 
   // Puzzle 1: best move is Nxd4 (f3 -> d4)
   await clickSquare(page, board, 'f3');
@@ -110,6 +111,7 @@ try {
   await page.screenshot({ path: SHOTS + '5-selected.png' });
   await clickSquare(page, board, 'd4');
   await page.waitForSelector('.feedback.ok', { timeout: 30000 });
+  check(await page.locator('.board-arrow').count() === 0, 'arrow clears once you move');
   const fb1 = await page.textContent('#feedback');
   check(/Stockfish would play/.test(fb1), `best move recognized ("${fb1.slice(0, 60)}…")`);
   await page.screenshot({ path: SHOTS + '6-correct.png' });

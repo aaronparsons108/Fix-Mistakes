@@ -257,7 +257,8 @@ async function loadPuzzle(i, sweepText) {
     : (m.drop / 100).toFixed(1);
   $('puzzle-context').innerHTML =
     `Move <strong>${m.moveNumber}</strong> vs <strong>${escapeHtml(g.opponent)}</strong>. ` +
-    `In the game you played <span class="played-move">${escapeHtml(m.playedSan)}</span> — a ` +
+    `In the game you played <span class="played-move">${escapeHtml(m.playedSan)}</span> ` +
+    `(the red arrow) — a ` +
     `${m.severity} that dropped your eval from ` +
     `<strong>${fromStr}</strong> to <strong>${toStr}</strong> ` +
     `(${dropStr} pawns). Find the move you should have played.`;
@@ -290,6 +291,8 @@ async function loadPuzzle(i, sweepText) {
 
 function restoreHighlights(m) {
   board.clearHighlights();
+  board.clearArrows();
+  board.drawArrow(m.playedUci.slice(0, 2), m.playedUci.slice(2, 4), 'played');
   if (m.prevMove) {
     board.highlight(m.prevMove.from, 'last-from');
     board.highlight(m.prevMove.to, 'last-to');
@@ -405,6 +408,7 @@ async function handleUserMove({ from, to }) {
 
   const mv = state.quiz.move({ from, to, promotion });
   board.clearHighlights('hint-glow');
+  board.clearArrows();
   mv.captured ? sounds.capture() : sounds.move();
   await board.move(from, to, promotion);
   if (session !== state.session) return;
@@ -536,6 +540,7 @@ $('btn-idk').addEventListener('click', async () => {
   state.quiz = new Chess(m.fen);
   board.setPosition(m.fen);
   restoreHighlights(m);
+  board.clearArrows(); // don't overlap the red arrow with the revealed best move
   setButtons({});
   await delay(350);
   if (session !== state.session) return;

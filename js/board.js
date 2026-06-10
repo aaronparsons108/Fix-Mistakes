@@ -13,7 +13,12 @@ export class Board {
     this.orientation = 'w';
     this.pieces = new Map(); // square -> piece element
     this.selected = null;
+    this._arrows = [];
     this._buildSquares();
+    this.arrowLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    this.arrowLayer.setAttribute('viewBox', '0 0 100 100');
+    this.arrowLayer.classList.add('arrow-layer');
+    this.el.appendChild(this.arrowLayer);
     this._bindPointer();
   }
 
@@ -64,12 +69,14 @@ export class Board {
     this.orientation = color;
     this._layoutSquares();
     for (const [sq, piece] of this.pieces) this._place(piece, sq, false);
+    this._renderArrows();
   }
 
   // fen board field only is enough; full FEN accepted
   setPosition(fen) {
     this.clearSelection();
     this.clearHighlights();
+    this.clearArrows();
     for (const piece of this.pieces.values()) piece.remove();
     this.pieces.clear();
     const rows = fen.split(' ')[0].split('/');
@@ -147,6 +154,45 @@ export class Board {
   clearHighlights(cls) {
     const classes = cls ? [cls] : ['last-from', 'last-to', 'check', 'hint-glow', 'sel'];
     for (const div of this.squares.values()) div.classList.remove(...classes);
+  }
+
+  // Arrows are drawn in an SVG overlay (100x100 units, one square = 12.5).
+  drawArrow(from, to, cls = 'played') {
+    this._arrows.push({ from, to, cls });
+    this._renderArrows();
+  }
+
+  clearArrows() {
+    if (this._arrows.length === 0) return;
+    this._arrows = [];
+    this._renderArrows();
+  }
+
+  _renderArrows() {
+    const NS = 'http://www.w3.org/2000/svg';
+    this.arrowLayer.innerHTML = '';
+    for (const { from, to, cls } of this._arrows) {
+      const a = this._coords(from);
+      const b = this._coords(to);
+      const x1 = a.x * 12.5 + 6.25, y1 = a.y * 12.5 + 6.25;
+      const x2 = b.x * 12.5 + 6.25, y2 = b.y * 12.5 + 6.25;
+      const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+      const ux = (x2 - x1) / len, uy = (y2 - y1) / len;
+      const sx = x1 + ux * 3.5, sy = y1 + uy * 3.5;   // start off the piece's center
+      const hx = x2 - ux * 4.3, hy = y2 - uy * 4.3;   // base of the arrowhead
+      const px = -uy, py = ux;                          // perpendicular
+
+      const g = document.createElementNS(NS, 'g');
+      g.setAttribute('class', `board-arrow ${cls}`);
+      const line = document.createElementNS(NS, 'line');
+      line.setAttribute('x1', sx); line.setAttribute('y1', sy);
+      line.setAttribute('x2', hx); line.setAttribute('y2', hy);
+      const head = document.createElementNS(NS, 'polygon');
+      head.setAttribute('points',
+        `${x2},${y2} ${hx + px * 2.9},${hy + py * 2.9} ${hx - px * 2.9},${hy - py * 2.9}`);
+      g.append(line, head);
+      this.arrowLayer.appendChild(g);
+    }
   }
 
   clearSelection() {
