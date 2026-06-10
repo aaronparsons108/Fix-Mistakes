@@ -38,9 +38,14 @@ It's a fully static site — any web server works (a server is required for the
 Stockfish worker; opening `index.html` directly from disk won't):
 
 ```bash
-npx http-server -p 8080        # or: python3 -m http.server 8080
-# then open http://localhost:8080
+python serve.py                # or: npx http-server -p 8080
+# then open http://127.0.0.1:8080
 ```
+
+Prefer `serve.py` over `python -m http.server`: it guarantees correct MIME
+types (Windows' http.server often serves .css/.js as text/plain, which makes
+Chrome render the page unstyled and refuse to run the ES modules) and sends
+no-cache headers so a plain refresh always picks up fresh code.
 
 Deep link: `http://localhost:8080/?user=yourname` pre-fills your username.
 
