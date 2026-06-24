@@ -179,7 +179,7 @@ export class Board {
       const len = Math.hypot(x2 - x1, y2 - y1) || 1;
       const ux = (x2 - x1) / len, uy = (y2 - y1) / len;
       const sx = x1 + ux * 3.5, sy = y1 + uy * 3.5;   // start off the piece's center
-      const hx = x2 - ux * 4.3, hy = y2 - uy * 4.3;   // base of the arrowhead
+      const hx = x2 - ux * 3.4, hy = y2 - uy * 3.4;   // base of the (small) arrowhead
       const px = -uy, py = ux;                          // perpendicular
 
       const g = document.createElementNS(NS, 'g');
@@ -187,9 +187,10 @@ export class Board {
       const line = document.createElementNS(NS, 'line');
       line.setAttribute('x1', sx); line.setAttribute('y1', sy);
       line.setAttribute('x2', hx); line.setAttribute('y2', hy);
+      // small arrowhead — just enough to show direction, not a "play this" prompt
       const head = document.createElementNS(NS, 'polygon');
       head.setAttribute('points',
-        `${x2},${y2} ${hx + px * 2.9},${hy + py * 2.9} ${hx - px * 2.9},${hy - py * 2.9}`);
+        `${x2},${y2} ${hx + px * 2.0},${hy + py * 2.0} ${hx - px * 2.0},${hy - py * 2.0}`);
       g.append(line, head);
       this.arrowLayer.appendChild(g);
     }

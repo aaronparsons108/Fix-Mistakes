@@ -258,7 +258,7 @@ async function loadPuzzle(i, sweepText) {
   $('puzzle-context').innerHTML =
     `Move <strong>${m.moveNumber}</strong> vs <strong>${escapeHtml(g.opponent)}</strong>. ` +
     `In the game you played <span class="played-move">${escapeHtml(m.playedSan)}</span> ` +
-    `(the red arrow) — a ` +
+    `(the dashed red arrow) — a ` +
     `${m.severity} that dropped your eval from ` +
     `<strong>${fromStr}</strong> to <strong>${toStr}</strong> ` +
     `(${dropStr} pawns). Find the move you should have played.`;
