@@ -1,6 +1,6 @@
-# ♞ Blunder Lab — Fix Your Mistakes
+# ♞ ReviseMyChess — Fix Your Mistakes
 
-A neon-soaked chess trainer that pulls your **chess.com** games, runs every
+A chess trainer that pulls your **chess.com** games, runs every
 position through **Stockfish**, finds the exact moments you threw the game
 away — and makes you replay them until you find the move you *should* have
 played.

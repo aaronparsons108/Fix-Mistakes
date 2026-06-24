@@ -1,4 +1,4 @@
-// Blunder Lab — main controller. Wires together: chess.com fetch → Stockfish
+// ReviseMyChess — main controller. Wires together: chess.com fetch → Stockfish
 // analysis → critical-moment quiz loop → session summary.
 
 import { Chess } from '../lib/chess.js';
@@ -621,7 +621,7 @@ async function showSummary() {
     : score >= 0.65 ? '🔪 TACTICAL SURGEON'
     : score >= 0.4 ? '📈 RISING TACTICIAN'
     : score >= 0.15 ? '🧩 PATTERN BUILDER'
-    : '🥚 BLUNDER APPRENTICE — the lab awaits';
+    : '🥚 BLUNDER APPRENTICE — keep revising';
 
   $('summary-rank').textContent = rank;
   $('stats-row').innerHTML = `
@@ -642,7 +642,7 @@ async function showSummary() {
 }
 
 $('btn-another').addEventListener('click', async () => {
-  await sweep('BACK TO THE LAB');
+  await sweep('BACK TO YOUR GAMES');
   showScreen('screen-games');
 });
 $('btn-new-player').addEventListener('click', () => showScreen('screen-landing'));

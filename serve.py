@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serve Blunder Lab locally: python serve.py [port]
+"""Serve ReviseMyChess locally: python serve.py [port]
 
 A drop-in replacement for `python -m http.server` that always sends correct
 MIME types. On Windows, the stock http.server reads types from the registry,
@@ -34,5 +34,5 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    print(f'Blunder Lab → http://127.0.0.1:{PORT}')
+    print(f'ReviseMyChess → http://127.0.0.1:{PORT}')
     http.server.ThreadingHTTPServer(('', PORT), Handler).serve_forever()

@@ -1,7 +1,7 @@
 // Tiny WebAudio synth — no audio assets needed. Everything is generated.
 
 let ctx = null;
-let muted = localStorage.getItem('blunderlab-muted') === '1';
+let muted = localStorage.getItem('revisemychess-muted') === '1';
 
 function audio() {
   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -38,7 +38,7 @@ export const sounds = {
 
 export function toggleMute() {
   muted = !muted;
-  localStorage.setItem('blunderlab-muted', muted ? '1' : '0');
+  localStorage.setItem('revisemychess-muted', muted ? '1' : '0');
   return muted;
 }
 
