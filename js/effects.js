@@ -6,8 +6,8 @@ const fxLayer = () => document.getElementById('fx-layer');
 
 // Red / black / white theme. Verdict bursts run white (best) → deep red (bad).
 const PALETTES = {
-  ok:    ['#ffffff', '#f0f0f2', '#ff6b75', '#d8d8db'],
-  great: ['#ff6b75', '#ffb3b9', '#ff2636', '#ffffff'],
+  ok:    ['#ffffff', '#f0f0f2', '#d8d8db', '#c9c9cc'],
+  great: ['#ffffff', '#f0f0f2', '#d8d8db', '#c9c9cc'],
   warn:  ['#ff2636', '#ff5a67', '#b3000f', '#ffd0d4'],
   bad:   ['#c1121f', '#ff2636', '#7a000a', '#ff8a93'],
   info:  ['#ffffff', '#ff6b75', '#ff2636', '#e6e6e8'],

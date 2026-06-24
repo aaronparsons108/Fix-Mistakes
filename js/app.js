@@ -255,21 +255,15 @@ async function loadPuzzle(i, sweepText) {
   const dropStr = m.mateBest == null && m.mateAfterPlayed == null
     ? (parseFloat(fromStr) - parseFloat(toStr)).toFixed(1)
     : (m.drop / 100).toFixed(1);
+  // compact facts (the dashed red arrow on the board marks this move)
   $('puzzle-context').innerHTML =
-    `Move <strong>${m.moveNumber}</strong> vs <strong>${escapeHtml(g.opponent)}</strong>. ` +
-    `In the game you played <span class="played-move">${escapeHtml(m.playedSan)}</span> ` +
-    `(the dashed red arrow) — a ` +
-    `${m.severity} that dropped your eval from ` +
-    `<strong>${fromStr}</strong> to <strong>${toStr}</strong> ` +
-    `(${dropStr} pawns). Find the move you should have played.`;
-  $('turn-banner').textContent =
-    `${m.userColor === 'w' ? 'WHITE' : 'BLACK'} TO MOVE — find the best move`;
+    `<span class="fact-k">IN GAME</span>` +
+    `<span class="played-move">${escapeHtml(m.playedSan)}</span>` +
+    `<span class="fact-sev">${m.severity}</span>` +
+    `<span class="fact-swing">${fromStr} → ${toStr}</span>` +
+    `<span class="fact-drop">−${dropStr}</span>`;
+  $('turn-banner').textContent = `${m.userColor === 'w' ? 'WHITE' : 'BLACK'} TO MOVE`;
   setFeedback('', '');
-  const bestUserCp = (m.userColor === 'w' ? 1 : -1) * m.evalBest;
-  const bestStr = formatEval(m.evalBest, m.mateBest, m.userColor);
-  $('eval-readout').innerHTML = bestUserCp < -150
-    ? `You were already behind here — even the best move only limits the damage at <b>${bestStr}</b>. Find the toughest defense.`
-    : `Stockfish's best move here holds an eval of <b>${bestStr}</b>. Match it.`;
   showEvalGraph(m);
   setButtons({ hint: true, idk: true });
   $('mini-thinking').hidden = true;
@@ -320,8 +314,10 @@ function renderCounter() {
       : r ? 'done' : '';
     return `<span class="pip ${cls}"></span>`;
   }).join('');
+  const m = state.moments[state.idx];
   $('puzzle-counter').innerHTML =
-    `CRITICAL MOMENT ${state.idx + 1} / ${state.moments.length} <span class="pips">${pips}</span>`;
+    `<span class="pc-move">MOVE ${m.moveNumber}</span>` +
+    `<span class="pc-meta">${state.idx + 1}/${state.moments.length} <span class="pips">${pips}</span></span>`;
 }
 
 /* Eval comparison graph: BEST / YOURS / GAME bars on a shared scale around a
@@ -442,54 +438,49 @@ async function handleUserMove({ from, to }) {
 function judge(kind, m, uci, evalAfter) {
   const { x, y } = board.squareCenter(uci.slice(2, 4));
   const you = formatEval(evalAfter.score, evalAfter.mateIn, m.userColor);
-  const best = formatEval(m.evalBest, m.mateBest, m.userColor);
   const sameAsGame = uci === m.playedUci;
   const youCls = kind === 'best' ? 'ok' : kind === 'great' ? 'great' : kind === 'good' ? 'warn' : 'bad';
   setGraphBar('you', userCp(m, evalAfter.score), you, youCls);
+  const san = escapeHtml(uciToSan(m.fen, uci));
 
   if (kind === 'best') {
     burst(x, y, 'ok', { power: 1.3 });
-    floatLabel(x, y, 'BEST MOVE!', 'ok');
+    floatLabel(x, y, 'BEST MOVE', 'ok');
     sounds.correct();
     state.results[state.idx] = state.attempts === 1 ? 'first' : 'solved';
     state.attempts === 1 ? state.stats.first++ : state.stats.solved++;
     renderCounter();
     setFeedback(
-      `<b>${escapeHtml(uciToSan(m.fen, uci))}</b> — exactly what Stockfish would play.` +
-      (state.attempts === 1 ? ' First try! 🔥' : ` Got there in ${state.attempts} tries.`),
+      `<b>${san}</b> · BEST <span class="dim">${state.attempts === 1 ? 'first try' : 'in ' + state.attempts + ' tries'}</span>`,
       'ok'
     );
-    $('eval-readout').innerHTML = `Position eval: <b>${best}</b> — edge preserved.`;
     setButtons({ next: true });
     return;
   }
 
   if (kind === 'great') {
     burst(x, y, 'great');
-    floatLabel(x, y, 'GREAT MOVE!', 'great');
+    floatLabel(x, y, 'GREAT', 'great');
     sounds.great();
-    setFeedback(
-      `Great move! It keeps your position strong… but Stockfish found something even <b>stronger</b>. Can you spot it?`,
-      'great'
-    );
-      setButtons({ retry: true, accept: true, idk: true });
+    setFeedback(`<b>${san}</b> · GREAT <span class="dim">not the best — retry or keep</span>`, 'great');
+    setButtons({ retry: true, accept: true, idk: true });
     return;
   }
 
   if (kind === 'good') {
     burst(x, y, 'warn', { particles: 16, power: 0.75 });
-    floatLabel(x, y, 'REASONABLE', 'warn');
+    floatLabel(x, y, 'INACCURATE', 'warn');
     sounds.wrong();
-    setFeedback(`Reasonable — but it lets the advantage slip. There's a better move here.`, 'warn');
+    setFeedback(`<b>${san}</b> · INACCURATE <span class="dim">retry</span>`, 'warn');
   } else {
     burst(x, y, 'bad');
-    floatLabel(x, y, sameAsGame ? 'DÉJÀ VU…' : 'NOT THIS', 'bad');
+    floatLabel(x, y, sameAsGame ? 'SAME AS GAME' : 'WORSE', 'bad');
     shake($('board-frame'));
     sounds.wrong();
     setFeedback(
       sameAsGame
-        ? `That's <b>exactly</b> what you played in the game — and it's why we're here. Find the better path!`
-        : `That makes things worse. Reset and look deeper.`,
+        ? `<b>${san}</b> · YOUR GAME MOVE <span class="dim">retry</span>`
+        : `<b>${san}</b> · WORSE <span class="dim">retry</span>`,
       'bad'
     );
   }
@@ -526,7 +517,7 @@ $('btn-hint').addEventListener('click', () => {
   state.stats.hints++;
   sounds.tick();
   board.highlight(m.bestUci.slice(0, 2), 'hint-glow');
-  setFeedback('This piece wants to move…', 'info');
+  setFeedback('↑ move this piece', 'info');
   $('btn-hint').hidden = true;
 });
 
@@ -558,8 +549,8 @@ $('btn-idk').addEventListener('click', async () => {
   state.stats.revealed++;
   renderCounter();
   setFeedback(
-    `Stockfish plays <b>${escapeHtml(m.bestSan)}</b> (${formatEval(m.evalBest, m.mateBest, m.userColor)}). ` +
-    `In the game you played <b>${escapeHtml(m.playedSan)}</b>. Burn this pattern in.`,
+    `BEST <b>${escapeHtml(m.bestSan)}</b> ${formatEval(m.evalBest, m.mateBest, m.userColor)} ` +
+    `<span class="dim">· you played ${escapeHtml(m.playedSan)}</span>`,
     'info'
   );
   setButtons({ next: true });

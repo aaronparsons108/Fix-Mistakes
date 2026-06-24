@@ -100,7 +100,7 @@ body {
   animation: knightTilt 4s ease-in-out infinite;
 }
 @keyframes knightTilt { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(8deg); } }
-.brand-name em { color: var(--red); font-style: normal; text-shadow: 0 0 12px rgba(255,38,52,0.6); }
+.brand-name em { color: var(--white); font-style: normal; }
 .icon-btn {
   background: var(--panel); border: 1px solid var(--panel-edge);
   border-radius: 8px; padding: 7px 12px; font-size: 18px; cursor: pointer;
@@ -446,36 +446,48 @@ body {
   backdrop-filter: blur(8px);
   display: flex; flex-direction: column; gap: 16px;
 }
-.puzzle-counter {
-  font-family: var(--font-display); font-weight: 700; letter-spacing: 3px;
-  font-size: 14px; color: var(--red);
+.puzzle-counter { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.pc-move {
+  font-family: var(--font-display); font-weight: 900; font-size: 24px; letter-spacing: 2px;
+  color: var(--white);
 }
-.puzzle-counter .pips { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; }
+.pc-meta {
+  font-family: var(--font-display); font-weight: 700; letter-spacing: 2px;
+  font-size: 13px; color: var(--text-dim); white-space: nowrap;
+}
+.puzzle-counter .pips { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
 .pip { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.16); }
 .pip.done { background: var(--white); box-shadow: 0 0 8px rgba(255,255,255,0.7); }
 .pip.failed { background: var(--red); box-shadow: 0 0 8px var(--red); }
 .pip.current { background: var(--red); box-shadow: 0 0 8px var(--red); animation: pipBlink 1.2s infinite; }
 @keyframes pipBlink { 50% { opacity: .4; } }
 
-.puzzle-context { color: var(--text-dim); font-size: 17px; line-height: 1.45; }
-.puzzle-context strong { color: var(--white); }
-.puzzle-context .played-move { color: var(--red); font-weight: 700; }
+/* compact fact row: IN GAME · <move> · <severity> · <eval swing> · <drop> */
+.puzzle-context {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 7px 10px;
+  padding: 12px 14px; border-radius: 8px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--panel-edge);
+}
+.fact-k { font-family: var(--font-display); font-size: 11px; letter-spacing: 1.5px; color: var(--text-dim); }
+.puzzle-context .played-move { color: var(--white); font-weight: 700; font-size: 19px; letter-spacing: .5px; }
+.fact-sev {
+  text-transform: uppercase; font-family: var(--font-display); font-size: 11px; letter-spacing: 1px;
+  color: var(--red); border: 1px solid rgba(255,38,52,0.45); padding: 2px 8px; border-radius: 4px;
+}
+.fact-swing { color: var(--text); font-weight: 700; }
+.fact-drop { color: var(--red); font-weight: 700; margin-left: auto; }
 
 .turn-banner {
-  font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: 1px;
-  padding: 12px 16px; border-radius: 8px; text-align: center;
+  font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 2px;
+  padding: 9px 14px; border-radius: 6px; text-align: center;
   background: rgba(255,38,52,0.1); border: 1px solid rgba(255,38,52,0.35); color: var(--red);
 }
 
-.feedback { min-height: 56px; font-size: 19px; font-weight: 600; line-height: 1.4; transition: opacity .25s; }
-.feedback.ok { color: var(--white); }
-.feedback.great { color: var(--red-soft); }
-.feedback.warn { color: var(--red); }
-.feedback.bad { color: var(--red-bad); }
-.feedback.info { color: var(--white); }
-
-.eval-readout { color: var(--text-dim); font-size: 16px; font-weight: 600; min-height: 22px; }
-.eval-readout b { color: var(--white); }
+/* verdict colour is binary: white = good (best/great), red = not (warn/bad) */
+.feedback { min-height: 40px; font-size: 19px; font-weight: 700; line-height: 1.35; letter-spacing: .5px; transition: opacity .25s; }
+.feedback.ok, .feedback.great, .feedback.info { color: var(--white); }
+.feedback.warn, .feedback.bad { color: var(--red); }
+.feedback .dim { color: var(--text-dim); font-weight: 600; font-size: 14px; letter-spacing: .5px; }
 
 /* ── eval comparison graph ───────────────────────────── */
 .eval-graph { display: flex; flex-direction: column; gap: 9px; }
@@ -499,13 +511,11 @@ body {
 .eg-bar.best { background: linear-gradient(90deg, #c9c9cc, var(--white)); box-shadow: 0 0 10px rgba(255,255,255,.5); }
 .eg-bar.game { background: var(--red-bad); opacity: .85; box-shadow: 0 0 8px rgba(193,18,31,.5); }
 .eg-bar.you  { background: var(--text-dim); }
-.eg-bar.you.ok    { background: linear-gradient(90deg, #c9c9cc, var(--white)); box-shadow: 0 0 10px rgba(255,255,255,.6); }
-.eg-bar.you.great { background: linear-gradient(90deg, var(--red), var(--red-soft)); box-shadow: 0 0 10px rgba(255,107,117,.6); }
+.eg-bar.you.ok, .eg-bar.you.great { background: linear-gradient(90deg, #c9c9cc, var(--white)); box-shadow: 0 0 10px rgba(255,255,255,.6); }
 .eg-bar.you.warn  { background: var(--red); box-shadow: 0 0 10px rgba(255,38,52,.5); }
 .eg-bar.you.bad   { background: var(--red-bad); box-shadow: 0 0 10px rgba(193,18,31,.5); }
 .eg-val { font-weight: 700; font-size: 15px; color: var(--text); white-space: nowrap; }
-.eg-val.ok { color: var(--white); }
-.eg-val.great { color: var(--red-soft); }
+.eg-val.ok, .eg-val.great { color: var(--white); }
 .eg-val.warn { color: var(--red); }
 .eg-val.bad { color: var(--red-bad); }
 .eg-axis {
@@ -539,7 +549,7 @@ body {
 }
 .stat-num { font-family: var(--font-display); font-size: 38px; font-weight: 900; }
 .stat-num.green { color: var(--white); text-shadow: 0 0 14px rgba(255,255,255,.5); }
-.stat-num.gold { color: var(--red-soft); text-shadow: 0 0 14px rgba(255,107,117,.5); }
+.stat-num.gold { color: var(--white); text-shadow: 0 0 14px rgba(255,255,255,.4); }
 .stat-num.cyan { color: var(--red); text-shadow: 0 0 14px rgba(255,38,52,.5); }
 .stat-label { color: var(--text-dim); font-weight: 600; letter-spacing: 1px; font-size: 14px; text-transform: uppercase; margin-top: 4px; }
 .summary-detail { color: var(--text-dim); font-size: 18px; margin-bottom: 30px; }
@@ -590,11 +600,9 @@ body {
   font-size: 26px; white-space: nowrap;
   animation: labelFloat 1.4s ease-out forwards;
 }
-.float-label.ok { color: var(--white); text-shadow: 0 0 18px rgba(255,255,255,0.8); }
-.float-label.great { color: var(--red-soft); text-shadow: 0 0 18px var(--red-soft); }
+.float-label.ok, .float-label.great, .float-label.info { color: var(--white); text-shadow: 0 0 18px rgba(255,255,255,0.8); }
 .float-label.warn { color: var(--red); text-shadow: 0 0 18px var(--red); }
 .float-label.bad { color: var(--red-bad); text-shadow: 0 0 18px var(--red-bad); }
-.float-label.info { color: var(--white); text-shadow: 0 0 18px rgba(255,255,255,0.7); }
 @keyframes labelFloat {
   0% { opacity: 0; transform: translate(-50%, -40%) scale(.6); }
   18% { opacity: 1; transform: translate(-50%, -75%) scale(1.12); }

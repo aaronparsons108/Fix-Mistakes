@@ -113,7 +113,7 @@ try {
   await page.waitForSelector('.feedback.ok', { timeout: 30000 });
   check(await page.locator('.board-arrow').count() === 0, 'arrow clears once you move');
   const fb1 = await page.textContent('#feedback');
-  check(/Stockfish would play/.test(fb1), `best move recognized ("${fb1.slice(0, 60)}…")`);
+  check(/BEST/.test(fb1) && /Nxd4/.test(fb1), `best move recognized ("${fb1.slice(0, 60)}…")`);
   await page.screenshot({ path: SHOTS + '6-correct.png' });
 
   // advance to puzzle 2 of N via the Next button (no auto-advance)
@@ -121,7 +121,7 @@ try {
   console.log(`     (analysis found ${total} critical moments)`);
   await page.keyboard.press('ArrowRight'); // → advances like the Next button
   await page.waitForFunction(
-    () => document.getElementById('puzzle-counter').textContent.includes('2 /'),
+    () => document.getElementById('puzzle-counter').textContent.includes('2/'),
     { timeout: 20000 }
   );
   await page.waitForTimeout(2500);
@@ -152,7 +152,7 @@ try {
   // burn through any remaining puzzles with "I don't know"
   for (let p = 3; p <= total; p++) {
     await page.waitForFunction(
-      (n) => document.getElementById('puzzle-counter').textContent.includes(`${n} /`),
+      (n) => document.getElementById('puzzle-counter').textContent.includes(`${n}/`),
       p, { timeout: 20000 }
     );
     await page.waitForTimeout(2500);
