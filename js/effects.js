@@ -4,12 +4,13 @@
 
 const fxLayer = () => document.getElementById('fx-layer');
 
+// Red / black / white theme. Verdict bursts run white (best) → deep red (bad).
 const PALETTES = {
-  ok:    ['#3dff8f', '#a8ffce', '#ffc83d', '#ffffff'],
-  great: ['#ffc83d', '#ffe9a8', '#ff9d2e', '#ffffff'],
-  warn:  ['#ff9d2e', '#ffbd6e', '#ff7a2e', '#ffe2c4'],
-  bad:   ['#ff4d6a', '#ff8fa1', '#ff2e2e', '#ffb199'],
-  info:  ['#00e5ff', '#8ff4ff', '#7c5cff', '#ffffff'],
+  ok:    ['#ffffff', '#f0f0f2', '#ff6b75', '#d8d8db'],
+  great: ['#ff6b75', '#ffb3b9', '#ff2636', '#ffffff'],
+  warn:  ['#ff2636', '#ff5a67', '#b3000f', '#ffd0d4'],
+  bad:   ['#c1121f', '#ff2636', '#7a000a', '#ff8a93'],
+  info:  ['#ffffff', '#ff6b75', '#ff2636', '#e6e6e8'],
 };
 
 // Radial burst shooting out from under a point (e.g. a just-moved piece).
@@ -75,7 +76,7 @@ export function shake(el) {
   setTimeout(() => el.classList.remove('shake'), 500);
 }
 
-// Full-screen diagonal neon sweep. Resolves at the midpoint (screen fully
+// Full-screen diagonal red/white sweep. Resolves at the midpoint (screen fully
 // covered) so the caller can swap content behind it.
 export function sweep(label = '') {
   return new Promise((resolve) => {
@@ -91,7 +92,7 @@ export function sweep(label = '') {
 
 export function confetti({ count = 120 } = {}) {
   const layer = fxLayer();
-  const colors = ['#00e5ff', '#ff2ec4', '#ffc83d', '#3dff8f', '#7c5cff', '#ffffff'];
+  const colors = ['#ff2636', '#ffffff', '#b3000f', '#ff6b75', '#e6e6e8', '#7a000a'];
   const w = window.innerWidth;
   for (let i = 0; i < count; i++) {
     const c = document.createElement('div');
