@@ -113,7 +113,7 @@ canvas.addEventListener('click', (e) => {
 
 async function boot() {
   state.engine.init().catch(() => {}); // warm the engine
-  try { await loadPieces(); } catch (e) { console.error('piece models failed to load', e); }
+  try { await loadPieces(); host.attachPawnModel(); } catch (e) { console.error('piece models failed to load', e); }
   board.setPosition(START_FEN);
   await wait(300);
   $('boot').classList.add('gone');
@@ -235,7 +235,7 @@ async function loadPuzzle(i) {
   board.setOrientation(m.userColor);
   renderCounter();
   $('hud-turn').textContent = '';
-  showBestEval(m);
+  showEvalGraph(m);
   setButtons({});
   speak(i === 0 ? "Watch how it happened…" : 'And it continues…');
   setFeedback('<span class="dim">click the board to skip ahead</span>', 'info');
@@ -324,14 +324,14 @@ async function handleUserMove({ from, to, promotion }) {
 function judge(kind, m, uci, after) {
   const to = uci.slice(2, 4);
   const { x, y } = board.squareCenter(to);
-  const you = formatEval(after.score, after.mateIn, m.userColor);
   const sameAsGame = uci === m.playedUci;
   const san = escapeText(uciToSan(m.fen, uci));
   const replay = state.replaying;
   state.gaze = board.squareWorld(to, 0.4);
-  showEval(m, you, kind);
+  fillYours(m, after.score, after.mateIn, kind, san);
 
   if (kind === 'best') {
+    revealBestSan(m);
     sparkle(x, y, 'ok', { power: 1.3 }); floatLabel(x, y, 'BEST', 'ok'); sounds.correct(); host.react('best');
     if (!replay) {
       state.results[state.idx] = state.attempts === 1 ? 'first' : 'solved';
@@ -371,7 +371,7 @@ function resetPuzzlePosition() {
   state.quiz = new Chess(m.fen);
   board.setPosition(m.fen);
   restoreHighlights(m);
-  showBestEval(m);
+  showEvalGraph(m);
   state.gaze = null;
   setButtons({ hint: !state.hintUsed, idk: true });
   state.locked = false;
@@ -414,6 +414,7 @@ async function doReveal() {
   if (session !== state.session) return;
   const { x, y } = board.squareCenter(to);
   sparkle(x, y, 'info'); floatLabel(x, y, m.bestSan, 'info');
+  revealBestSan(m);
   if (state.results[state.idx] == null) { state.results[state.idx] = 'revealed'; state.stats.revealed++; renderCounter(); }
   speak(`I'd play <span class="q">${escapeText(m.bestSan)}</span>. Remember it.`);
   setFeedback(`BEST <b>${escapeText(m.bestSan)}</b> ${formatEval(m.evalBest, m.mateBest, m.userColor)} <span class="dim">· you played ${escapeText(m.playedSan)}</span>`, 'info');
@@ -431,12 +432,52 @@ function renderCounter() {
   $('hud-counter').innerHTML = `MOVE ${state.moments[state.idx].moveNumber} <span class="pips">${pips}</span>`;
 }
 
-function showBestEval(m) {
-  $('hud-eval').innerHTML = `the best move holds <span class="best">${formatEval(m.evalBest, m.mateBest, m.userColor)}</span>`;
+/* eval bars — GAME (the move you actually played), BEST, YOURS.
+   Evals are shown from the player's perspective (right = good for you). */
+
+function userCp(m, score) {
+  const sign = m.userColor === 'w' ? 1 : -1;
+  return Math.max(-1000, Math.min(1000, score * sign));
 }
-function showEval(m, you, kind) {
-  const cls = kind === 'best' ? 'best' : 'you';
-  $('hud-eval').innerHTML = `best <span class="best">${formatEval(m.evalBest, m.mateBest, m.userColor)}</span> · yours <span class="${cls}">${you}</span>`;
+
+function showEvalGraph(m) {
+  const gameCp = userCp(m, m.evalAfterPlayed), bestCp = userCp(m, m.evalBest);
+  state.graphLimit = Math.max(Math.abs(gameCp), Math.abs(bestCp), 250) * 1.15;
+  const row = (key, label, sub, val, cls) => `
+    <div class="hg-row">
+      <span class="hg-id"><span class="hg-label">${label}</span><span class="hg-sub" data-sub="${key}">${sub}</span></span>
+      <span class="hg-track"><i class="hg-zero"></i><i class="hg-bar ${cls}" data-bar="${key}" style="left:50%;width:0"></i></span>
+      <span class="hg-val ${cls}" data-val="${key}">${val}</span>
+    </div>`;
+  $('hud-graph').innerHTML =
+    row('game', 'GAME', escapeText(m.playedSan), formatEval(m.evalAfterPlayed, m.mateAfterPlayed, m.userColor), 'bad') +
+    row('best', 'BEST', '?', formatEval(m.evalBest, m.mateBest, m.userColor), 'ok') +
+    row('you', 'YOURS', '—', '—', '');
+  requestAnimationFrame(() => { setGraphBar('game', gameCp); setGraphBar('best', bestCp); });
+}
+
+function setGraphBar(key, cp, cls) {
+  const bar = $('hud-graph').querySelector(`[data-bar="${key}"]`);
+  if (!bar) return;
+  const pct = Math.min(Math.abs(cp) / (state.graphLimit || 1), 1) * 50;
+  bar.style.width = pct + '%';
+  bar.style.left = (cp >= 0 ? 50 : 50 - pct) + '%';
+  if (cls !== undefined) bar.className = `hg-bar ${cls}`;
+}
+
+// fill in YOURS after the player moves
+function fillYours(m, score, mateIn, kind, san) {
+  const cls = kind === 'best' ? 'ok' : kind === 'great' ? 'great' : kind === 'good' ? 'warn' : 'bad';
+  const g = $('hud-graph');
+  g.querySelector('[data-sub="you"]').textContent = san;
+  const val = g.querySelector('[data-val="you"]');
+  val.textContent = formatEval(score, mateIn, m.userColor); val.className = `hg-val ${cls}`;
+  setGraphBar('you', userCp(m, score), cls);
+}
+
+function revealBestSan(m) {
+  const el = $('hud-graph').querySelector('[data-sub="best"]');
+  if (el) el.textContent = escapeText(m.bestSan);
 }
 
 function setFeedback(html, cls) { const f = $('hud-feedback'); f.innerHTML = html; f.className = 'hud-feedback ' + (cls || ''); }

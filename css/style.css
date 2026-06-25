@@ -143,11 +143,24 @@ body {
 .hud-feedback.warn { color: var(--q-ok); }
 .hud-feedback.bad { color: var(--q-bad); }
 .hud-feedback.info { color: #3a4a66; }
-.hud-eval {
-  text-align: center; font-family: 'Typewriter', monospace; font-size: 14px;
-  color: #5a4523; min-height: 18px; letter-spacing: .5px;
+/* eval comparison bars: GAME (what you played) · BEST · YOURS */
+.hud-graph { display: flex; flex-direction: column; gap: 5px; margin: 4px 0 2px; }
+.hg-row { display: grid; grid-template-columns: 58px 1fr 42px; align-items: center; gap: 7px; }
+.hg-id { display: flex; flex-direction: column; line-height: 1.05; }
+.hg-label { font-family: 'Typewriter', monospace; font-size: 9px; letter-spacing: 1.5px; color: #6a5430; }
+.hg-sub { font-family: 'Typewriter', monospace; font-size: 13px; color: #2c2114; min-height: 14px; }
+.hg-track {
+  position: relative; height: 13px; border-radius: 7px;
+  background: rgba(70,50,25,0.16); box-shadow: inset 0 1px 2px rgba(60,40,20,0.3);
 }
-.hud-eval .best { color: var(--q-best); } .hud-eval .you { color: var(--blood); }
+.hg-zero { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: rgba(70,50,25,0.5); }
+.hg-bar { position: absolute; top: 2px; bottom: 2px; min-width: 3px; border-radius: 6px; transition: left .6s cubic-bezier(.2,.9,.3,1), width .6s cubic-bezier(.2,.9,.3,1), background .3s; background: #9a8a6a; }
+.hg-bar.ok   { background: linear-gradient(90deg, #3f7a32, #6fae54); }
+.hg-bar.great{ background: linear-gradient(90deg, #b08a1e, #e0b840); }
+.hg-bar.warn { background: linear-gradient(90deg, #b06a1e, #e08a3a); }
+.hg-bar.bad  { background: linear-gradient(90deg, #8a2418, #c0402c); }
+.hg-val { font-family: 'Typewriter', monospace; font-size: 13px; font-weight: 700; text-align: right; color: #4a3a22; }
+.hg-val.ok { color: #4f8a3a; } .hg-val.great { color: #b08a1e; } .hg-val.warn { color: #b06a1e; } .hg-val.bad { color: var(--blood); }
 #hud-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
 .hud-hint { text-align: center; font-family: 'Typewriter', monospace; font-size: 11px; color: rgba(90,69,35,0.7); margin-top: 8px; letter-spacing: 1px; }
 

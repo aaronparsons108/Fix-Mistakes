@@ -4,6 +4,7 @@
 
 import * as THREE from '../lib/three/three.module.js';
 import { tween } from './tween.js';
+import { pawnModel } from './pieces.js';
 
 export const HOST_COLOR = 0x3f5a2a;   // mossy green — the thing across the table
 
@@ -22,11 +23,12 @@ export class Host {
     this.nextBlink = 1.5;
     this.scene = scene;
 
-    const skin = new THREE.MeshStandardMaterial({ color: HOST_COLOR, roughness: 0.6, metalness: 0.05, emissive: 0x0c1404, emissiveIntensity: 0.4 });
-    const body = new THREE.Mesh(new THREE.LatheGeometry(PAWN, 36), skin);
-    body.scale.set(2.7, 2.7, 2.7);
-    body.castShadow = true; body.receiveShadow = true;
-    this.group.add(body);
+    this.skin = new THREE.MeshStandardMaterial({ color: HOST_COLOR, roughness: 0.6, metalness: 0.05, emissive: 0x0c1404, emissiveIntensity: 0.4 });
+    // fallback procedural body until the real pawn model is attached
+    this.body = new THREE.Mesh(new THREE.LatheGeometry(PAWN, 36), this.skin);
+    this.body.scale.set(2.7, 2.7, 2.7);
+    this.body.castShadow = true; this.body.receiveShadow = true;
+    this.group.add(this.body);
 
     this.eyeL = this._eye(-1);
     this.eyeR = this._eye(1);
@@ -38,6 +40,18 @@ export class Host {
     this.group.add(this.browL, this.browR);
 
     scene.add(this.group);
+  }
+
+  // Swap the fallback body for the real board-pawn model (kept green), so the
+  // host matches the pieces on the table.
+  attachPawnModel() {
+    const m = pawnModel();
+    if (!m) return;
+    m.traverse((o) => { if (o.isMesh) { o.material = this.skin; o.castShadow = true; o.receiveShadow = true; } });
+    m.scale.setScalar(2.6);   // giant version of the on-board pawn
+    this.group.remove(this.body);
+    this.body = m;
+    this.group.add(m);
   }
 
   _eye(side) {

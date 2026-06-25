@@ -27,6 +27,9 @@ export async function loadPieces() {
 
 export function piecesReady() { return loaded; }
 
+// A clone of the normalised pawn model (for the host body), unpainted.
+export function pawnModel() { return templates.p ? templates.p.clone(true) : null; }
+
 // Scale to a target height, recentre on x/z, sit the base on y = 0.
 function normalize(scene, targetH) {
   let box = new THREE.Box3().setFromObject(scene);
