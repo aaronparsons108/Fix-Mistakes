@@ -38,21 +38,21 @@ export class Paper {
   _hand() {
     const g = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: HOST_COLOR, roughness: 0.6, metalness: 0.08, emissive: 0x2c4a16, emissiveIntensity: 0.55 });
-    const palm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.85, 0.42), mat);
-    palm.position.set(0, -0.28, -0.18); g.add(palm);
-    const knuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.5, 18, 1, false, 0, Math.PI), mat);
-    knuckle.rotation.z = Math.PI / 2; knuckle.position.set(0, 0.02, 0.0); g.add(knuckle);
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.8, 0.42), mat);
+    palm.position.set(0, -0.34, -0.18); g.add(palm);
+    const knuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.5, 18, 1, false, 0, Math.PI), mat);
+    knuckle.rotation.z = Math.PI / 2; knuckle.position.set(0, -0.06, 0.0); g.add(knuckle);
     for (let i = 0; i < 4; i++) {
       const fx = -0.56 + i * 0.375;
-      const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.42, 5, 10), mat);
-      finger.position.set(fx, 0.18, 0.2); finger.rotation.x = 1.32; g.add(finger);
+      const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.3, 5, 10), mat);
+      finger.position.set(fx, 0.04, 0.2); finger.rotation.x = 1.36; g.add(finger);
       const tip = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), mat);
-      tip.position.set(fx, 0.46, 0.24); g.add(tip);
+      tip.position.set(fx, 0.28, 0.22); g.add(tip);
     }
-    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.36, 5, 10), mat);
-    thumb.position.set(-0.82, 0.0, 0.12); thumb.rotation.z = 0.8; thumb.rotation.x = 0.8; g.add(thumb);
+    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.32, 5, 10), mat);
+    thumb.position.set(-0.82, -0.12, 0.12); thumb.rotation.z = 0.8; thumb.rotation.x = 0.85; g.add(thumb);
     g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-    g.position.set(0, -1.45, 0);
+    g.position.set(0, -1.62, 0);   // grip the very bottom edge, below the list
     return g;
   }
 
@@ -77,26 +77,26 @@ export class Paper {
   }
 
   drawGameList(games) {
-    this._bg(); this._title('Thy recent defeats');
+    this._bg(); this._title('Your recent defeats');
     const x = this.ctx; this.lineBoxes = [];
-    const items = games.slice(0, 7);
+    const items = games.slice(0, 6);   // leave the bottom margin clear for the hand
     items.forEach((g, i) => {
-      const y = 150 + i * 76;
-      this.lineBoxes.push({ y0: y - 34, y1: y + 36, index: i });
+      const y = 142 + i * 68;
+      this.lineBoxes.push({ y0: y - 30, y1: y + 34, index: i });
       x.fillStyle = i % 2 ? 'rgba(120,90,50,0.08)' : 'rgba(120,90,50,0.03)';
-      x.fillRect(34, y - 34, CW - 68, 70);
-      x.fillStyle = '#2c2114'; x.font = "30px 'IM Fell English', Georgia, serif";
+      x.fillRect(34, y - 30, CW - 68, 62);
+      x.fillStyle = '#2c2114'; x.font = "29px 'IM Fell English', Georgia, serif";
       x.fillText(`vs ${g.opponent}`, 50, y);
-      x.fillStyle = '#7a2618'; x.font = "20px 'Special Elite', monospace";
-      x.fillText(`${g.resultReason}`, 50, y + 26);
+      x.fillStyle = '#7a2618'; x.font = "19px 'Special Elite', monospace";
+      x.fillText(`${g.resultReason}`, 50, y + 24);
       x.fillStyle = '#6a5638'; x.textAlign = 'right';
-      x.font = "20px 'Special Elite', monospace";
+      x.font = "19px 'Special Elite', monospace";
       x.fillText(`${g.opponentRating ?? '?'} · ${g.timeClass}`, CW - 50, y);
-      x.fillText(g.userColor === 'w' ? 'you: white' : 'you: black', CW - 50, y + 26);
+      x.fillText(g.userColor === 'w' ? 'you: white' : 'you: black', CW - 50, y + 24);
       x.textAlign = 'left';
     });
-    x.fillStyle = '#6a5638'; x.font = "italic 19px 'IM Fell English', serif"; x.textAlign = 'center';
-    x.fillText('— touch one to relive it —', CW / 2, 150 + items.length * 76 + 6);
+    x.fillStyle = '#6a5638'; x.font = "italic 18px 'IM Fell English', serif"; x.textAlign = 'center';
+    x.fillText('— click one to relive it —', CW / 2, 142 + items.length * 68 + 8);
     x.textAlign = 'left';
     this.tex.needsUpdate = true;
   }
@@ -112,6 +112,9 @@ export class Paper {
     await tweenVec(this.mesh.position, { z: -4.2, y: 0.9 }, 600, 'easeInOutQuad');
     this.mesh.visible = false; this.hidden = true;
   }
+
+  // World position of the gripping hand (for the host's reaching arm).
+  handWorld() { return this.mesh.localToWorld(new THREE.Vector3(0, -1.62, -0.15)); }
 
   // Returns the picked game index, or -1.
   pick(clientX, clientY) {

@@ -92,49 +92,81 @@ function plankTexture() {
   return t;
 }
 
-/* ── candlelight ──────────────────────────────────────── */
+/* ── the hanging lamp (height/brightness driven by the pull-rope) ─ */
+let shadeMesh, lampCord, ropeCord, lampBaseIntensity = 150;
+export let lampControl = 0.45;        // 0 = lamp high & dim, 1 = low & bright
+export let ropeKnob = null;
+const LZ = -0.6;                       // lamp x/z home
+const CEIL = 13.5;
+const LAMP_HI = 9.2, LAMP_LO = 3.8;    // lamp height range
+
 function buildLights() {
-  // a single lamp hanging over the table, pooling warm light onto the board
-  lamp = new THREE.SpotLight(0xffe8c4, 150, 28, Math.PI / 4.2, 0.5, 1.5);
-  lamp.position.set(0, 7.6, -0.6);
+  lamp = new THREE.SpotLight(0xffe8c4, 150, 32, Math.PI / 4.0, 0.5, 1.5);
+  lamp.position.set(0, 7.5, LZ);
   lamp.target.position.set(0, 0, -1.0);
   lamp.castShadow = true;
   lamp.shadow.mapSize.set(2048, 2048);
-  lamp.shadow.camera.near = 1; lamp.shadow.camera.far = 18; lamp.shadow.bias = -0.0015;
+  lamp.shadow.camera.near = 1; lamp.shadow.camera.far = 24; lamp.shadow.bias = -0.0015;
   scene.add(lamp); scene.add(lamp.target);
 
-  // warm fill so the room and the host aren't lost to black
-  scene.add(new THREE.HemisphereLight(0x6f5a3e, 0x140d08, 0.6));
+  scene.add(new THREE.HemisphereLight(0x6f5a3e, 0x140d08, 0.55));
   hostFill = new THREE.PointLight(0xffd49a, 32, 16, 2.0);
-  hostFill.position.set(0, 4.2, -4.0);   // close to the host, to catch his face + eyes
+  hostFill.position.set(0, 4.2, -4.0);
   scene.add(hostFill);
 
   buildLamp();
+  setLampControl(lampControl);
 }
 
 function buildLamp() {
   const metal = new THREE.MeshStandardMaterial({ color: 0x18110a, roughness: 0.5, metalness: 0.45 });
-  const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 6, 8), metal);
-  cord.position.set(0, 11.2, -0.6); scene.add(cord);
-  const shade = new THREE.Mesh(
+  lampCord = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1, 8), metal); scene.add(lampCord);
+  shadeMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(0.5, 1.7, 1.4, 32, 1, true),
     new THREE.MeshStandardMaterial({ color: 0x241710, roughness: 0.5, metalness: 0.35, side: THREE.DoubleSide, emissive: 0x4a2c12, emissiveIntensity: 0.6 })
   );
-  shade.position.set(0, 8.3, -0.6); scene.add(shade);
-  bulbMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.26, 16, 12),
-    new THREE.MeshBasicMaterial({ color: 0xffe7b0, toneMapped: false })
-  );
-  bulbMesh.position.set(0, 7.7, -0.6); scene.add(bulbMesh);
+  scene.add(shadeMesh);
+  bulbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffe7b0, toneMapped: false }));
+  scene.add(bulbMesh);
+
+  // the pull-rope hanging at the right, toward the player — drag it to move the lamp
+  ropeCord = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 1, 6), new THREE.MeshStandardMaterial({ color: 0x7a6238, roughness: 0.95 }));
+  scene.add(ropeCord);
+  ropeKnob = new THREE.Mesh(new THREE.SphereGeometry(0.3, 18, 14), new THREE.MeshStandardMaterial({ color: 0x9a7038, roughness: 0.7, emissive: 0x2c1c0a, emissiveIntensity: 0.5 }));
+  ropeKnob.position.set(4.6, 5, 2.2);
+  scene.add(ropeKnob);
 }
 
-// gentle sway of the hanging lamp + a faint living glow
+function setCord(mesh, x, bottomY, z, topY) {
+  mesh.position.set(x, (bottomY + topY) / 2, z);
+  mesh.scale.set(1, topY - bottomY, 1);
+}
+
+export function setLampControl(t) {
+  lampControl = Math.max(0, Math.min(1, t));
+  const y = LAMP_HI + (LAMP_LO - LAMP_HI) * lampControl;
+  lamp.position.set(LZ * 0, y, LZ);
+  bulbMesh.position.set(0, y + 0.1, LZ);
+  shadeMesh.position.set(0, y + 0.7, LZ);
+  setCord(lampCord, 0, y + 1.4, LZ, CEIL);
+  lampBaseIntensity = 95 + 150 * lampControl;          // lower = brighter
+  baseExposure = 0.86 + 0.42 * lampControl;
+  if (renderer) renderer.toneMappingExposure = baseExposure;
+  const knobY = 6.5 + (3.0 - 6.5) * lampControl;        // knob drops as the lamp drops
+  ropeKnob.position.y = knobY;
+  setCord(ropeCord, ropeKnob.position.x, knobY, ropeKnob.position.z, CEIL + 1);
+}
+export function getLampControl() { return lampControl; }
+export function getRopeKnob() { return ropeKnob; }
+
+// gentle sway + a faint living glow; brightness comes from the rope control
 function flicker(t) {
   if (!lamp) return;
-  const sx = Math.sin(t * 0.55) * 0.13, sz = Math.cos(t * 0.43) * 0.09;
-  lamp.position.x = sx; lamp.position.z = -0.6 + sz;
-  if (bulbMesh) { bulbMesh.position.x = sx; bulbMesh.position.z = -0.6 + sz; }
-  lamp.intensity = 150 * (1 + 0.025 * Math.sin(t * 5.0));
+  const sx = Math.sin(t * 0.5) * 0.1, sz = Math.cos(t * 0.4) * 0.07;
+  lamp.position.x = sx; lamp.position.z = LZ + sz;
+  bulbMesh.position.x = sx; bulbMesh.position.z = LZ + sz;
+  shadeMesh.position.x = sx; shadeMesh.position.z = LZ + sz;
+  lamp.intensity = lampBaseIntensity * (1 + 0.025 * Math.sin(t * 5.0));
 }
 
 // Briefly brighten the room (used at dramatic beats).

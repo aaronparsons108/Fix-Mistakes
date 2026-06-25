@@ -75,6 +75,9 @@ export class Host {
     return b;
   }
 
+  // World point on the body where the reaching arm attaches.
+  shoulderWorld() { return this.group.localToWorld(new THREE.Vector3(0.5, 1.0, 0.55)); }
+
   // Aim both irises at a world point (e.g. a board square), or null for the player.
   lookAt(worldPoint) {
     const target = worldPoint || new THREE.Vector3(0, 3.5, 7.5); // the player

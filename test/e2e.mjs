@@ -64,6 +64,9 @@ try {
   await page.waitForFunction(() => window.__rmc && window.__rmc.state === 'ASK_USERNAME', { timeout: 15000 });
   await page.evaluate(() => { window.__rmc.fastForward = true; });
   check(true, 'boots straight into the cabin (ASK_USERNAME)');
+  await page.evaluate(() => window.__rmc.setLamp(0.9));
+  check(await page.evaluate(() => Math.abs(window.__rmc.lamp - 0.9) < 0.01), 'pull-rope drives the lamp brightness');
+  await page.evaluate(() => window.__rmc.setLamp(0.45));
   await page.screenshot({ path: SHOTS + 'cabin-1-boot.png' });
 
   // username -> paper of games

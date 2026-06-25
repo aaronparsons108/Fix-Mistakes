@@ -3,13 +3,14 @@
 // of recent losses, then quizzes the player's blunders on the real 3D board.
 // Reuses chesscom.js / engine.js / analysis.js / chess.js / stockfish unchanged.
 
+import * as THREE from '../lib/three/three.module.js';
 import { Chess } from '../lib/chess.js';
 import { Engine, formatEval } from './engine.js';
 import { fetchPlayer, fetchLostGames } from './chesscom.js';
 import { analyzeGame, uciToSan } from './analysis.js';
-import { initScene, scene, camera, onFrame, flareCandles } from './scene.js';
+import { initScene, scene, camera, onFrame, flareCandles, setLampControl, getLampControl, getRopeKnob } from './scene.js';
 import { Board3D } from './board3d.js';
-import { Host } from './host.js';
+import { Host, HOST_COLOR } from './host.js';
 import { Paper } from './paper.js';
 import { FAST, wait } from './tween.js';
 import { sounds, toggleMute, isMuted } from './sound.js';
@@ -52,11 +53,51 @@ host = new Host(scene);
 paper = new Paper(scene, camera);
 board.bindPointer(canvas);
 
+// the host's long arm, stretched from its body to the hand holding the paper
+const arm = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.2, 0.34, 1, 16),
+  new THREE.MeshStandardMaterial({ color: HOST_COLOR, roughness: 0.6, metalness: 0.05, emissive: 0x0c1404, emissiveIntensity: 0.35 })
+);
+arm.castShadow = true; arm.visible = false;
+scene.add(arm);
+const _UP = new THREE.Vector3(0, 1, 0), _mid = new THREE.Vector3(), _dir = new THREE.Vector3();
+function stretchArm(a, b) {
+  _mid.addVectors(a, b).multiplyScalar(0.5); arm.position.copy(_mid);
+  _dir.subVectors(b, a); arm.scale.set(1, _dir.length(), 1);
+  arm.quaternion.setFromUnitVectors(_UP, _dir.normalize());
+}
+
 onFrame((t, dt) => {
   host.update(t, dt);
   host.lookAt(state.gaze);
   board.pulse(t);
+  if (!paper.hidden) { arm.visible = true; stretchArm(host.shoulderWorld(), paper.handWorld()); }
+  else arm.visible = false;
 });
+
+// the pull-rope: drag it to raise/lower the lamp (down = closer + brighter).
+// Registered in the capture phase so grabbing the rope pre-empts board input.
+const ropeRay = new THREE.Raycaster();
+let ropeDrag = null;
+function ropeHit(e) {
+  const knob = getRopeKnob(); if (!knob) return false;
+  ropeRay.setFromCamera(new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1), camera);
+  return ropeRay.intersectObject(knob).length > 0;
+}
+canvas.addEventListener('pointerdown', (e) => {
+  if (!ropeHit(e)) return;
+  ropeDrag = { startY: e.clientY, startT: getLampControl() };
+  canvas.setPointerCapture(e.pointerId);
+  canvas.style.cursor = 'grabbing';
+  e.stopImmediatePropagation();
+}, true);
+canvas.addEventListener('pointermove', (e) => {
+  if (ropeDrag) { setLampControl(ropeDrag.startT + ((e.clientY - ropeDrag.startY) / window.innerHeight) * 1.8); e.stopImmediatePropagation(); return; }
+  canvas.style.cursor = ropeHit(e) ? 'grab' : '';
+}, true);
+const ropeEnd = () => { if (ropeDrag) { ropeDrag = null; canvas.style.cursor = ''; } };
+canvas.addEventListener('pointerup', ropeEnd, true);
+canvas.addEventListener('pointercancel', ropeEnd, true);
 
 // pick games / advance summary by clicking the parchment
 canvas.addEventListener('click', (e) => {
@@ -71,7 +112,7 @@ async function boot() {
   await wait(400);
   $('boot').classList.add('gone');
   setPhase('ASK_USERNAME');
-  speak(`You look <span class="q">lost</span>. Sit. Whisper me thy <span class="q">chess.com</span> name… and I shall show thee where the games <span class="q">slipped away</span>.`);
+  speak(`You look <span class="q">lost</span>. Sit. Tell me your <span class="q">chess.com</span> name… and I'll show you where the games <span class="q">slipped away</span>.`);
   $('username-panel').hidden = false;
   $('username-input').focus?.();
 }
@@ -94,7 +135,7 @@ $('btn-rename').addEventListener('click', () => {
   $('quiz-hud').hidden = true;
   $('username-panel').hidden = false;
   $('username-error').hidden = true;
-  speak('Another name, then? Whisper it.');
+  speak('Another name? Go on.');
   $('username-input').focus?.();
 });
 
@@ -102,16 +143,16 @@ async function doFetch(name) {
   setPhase('FETCHING');
   const err = $('username-error'); err.hidden = true;
   const go = $('username-go'); go.disabled = true; go.textContent = 'he listens…';
-  speak('Hmm. Let me <span class="q">remember</span> thy defeats…');
+  speak('Hmm. Let me <span class="q">remember</span> your defeats…');
   try {
     await fetchPlayer(name);
     const games = await fetchLostGames(name);
-    if (!games.length) throw new Error('No losses? Either thou art unbeatable, or thou art a liar.');
+    if (!games.length) throw new Error("No losses? Either you're unbeatable, or you're lying.");
     state.username = name; state.games = games;
     $('username-panel').hidden = true;
     $('btn-rename').hidden = false;
     setPhase('PICK_GAME');
-    speak(`So many, ${escapeText(name)}. <span class="q">Choose</span> one to relive.`, { });
+    speak(`So many, ${escapeText(name)}. <span class="q">Pick</span> one to relive.`);
     paper.drawGameList(games);
     host.leanIn();
     await paper.slideIn();
@@ -135,13 +176,13 @@ async function pickGame(i) {
   setPhase('ANALYZING');
   sounds.tick();
   await paper.slideOut();
-  speak('Let us see how it <span class="q">unravelled</span>…');
+  speak("Let's see how it <span class=\"q\">fell apart</span>…");
   flareCandles();
   try {
     await state.engine.init();
     const { moments } = await analyzeGame(game, state.engine, { depth: ANALYSIS_DEPTH });
     if (!moments.length) {
-      speak('No grand blunder here — thou wert simply <span class="q">outplayed</span>. Choose another.');
+      speak('No real blunder here — you were just <span class="q">outplayed</span>. Pick another.');
       backToGames();
       return;
     }
@@ -156,7 +197,7 @@ async function backToGames(line) {
   setPhase('PICK_GAME');
   $('quiz-hud').hidden = true;
   hush();
-  speak(line || `<span class="q">Choose</span> one to relive.`);
+  speak(line || `<span class="q">Pick</span> one to relive.`);
   paper.drawGameList(state.games);
   host.leanIn(); await paper.slideIn(); await host.leanBack();
 }
@@ -189,7 +230,7 @@ async function loadPuzzle(i) {
   setFeedback('', '');
   showBestEval(m);
   setButtons({ hint: true, idk: true });
-  speak(`Move ${m.moveNumber}. Here thou <span class="q">faltered</span>. Find the move thou should’st have played.`);
+  speak(`Move ${m.moveNumber}. Here's where it <span class="q">went wrong</span>. Find the move you should have played.`);
 
   // replay the opponent's previous move so the moment reads
   if (m.prevMove) {
@@ -272,7 +313,7 @@ function judge(kind, m, uci, after) {
       state.attempts === 1 ? state.stats.first++ : state.stats.solved++;
       renderCounter();
     }
-    speak(state.attempts === 1 && !replay ? 'The very move. <span class="q">Clever</span> little thing.' : 'There it is.');
+    speak(state.attempts === 1 && !replay ? "That's the one. <span class=\"q\">Clever</span>." : 'There it is.');
     setFeedback(`<b>${san}</b>: BEST <span class="dim">${replay ? 'again' : state.attempts === 1 ? 'first try' : 'in ' + state.attempts + ' tries'}</span>`, 'ok');
     setButtons({ next: true });
     return;
@@ -286,11 +327,11 @@ function judge(kind, m, uci, after) {
   }
   if (kind === 'good') {
     sparkle(x, y, 'warn', { count: 14, power: 0.7 }); floatLabel(x, y, 'INACCURATE', 'warn'); sounds.wrong(); host.react('good');
-    speak('It slips through thy fingers. <span class="q">Again</span>.');
+    speak('It slips away. <span class="q">Again</span>.');
     setFeedback(`<b>${san}</b>: INACCURATE`, 'warn');
   } else {
     sparkle(x, y, 'bad'); floatLabel(x, y, sameAsGame ? 'AS BEFORE' : 'WORSE', 'bad'); sounds.wrong(); host.react('bad');
-    speak(sameAsGame ? 'The same <span class="q">mistake</span>. We are here because of it.' : 'No. Thou makest it <span class="q">worse</span>.');
+    speak(sameAsGame ? "The same <span class=\"q\">mistake</span>. That's why we're here." : 'No — that makes it <span class="q">worse</span>.');
     setFeedback(sameAsGame ? `<b>${san}</b>: YOUR GAME MOVE` : `<b>${san}</b>: WORSE`, 'bad');
   }
   if (replay) { setButtons({ retry: true, next: true }); return; }
@@ -325,7 +366,7 @@ function nextPuzzle() {
 async function completeSession() {
   state.idx = state.moments.length;
   setFeedback('', '');
-  await backToGames('That game is wrung dry. <span class="q">Choose</span> another.');
+  await backToGames("That game's done. <span class=\"q\">Pick</span> another.");
 }
 
 /* ─────────────────────── reveal / hint ─────────────────── */
@@ -349,7 +390,7 @@ async function doReveal() {
   const { x, y } = board.squareCenter(to);
   sparkle(x, y, 'info'); floatLabel(x, y, m.bestSan, 'info');
   if (state.results[state.idx] == null) { state.results[state.idx] = 'revealed'; state.stats.revealed++; renderCounter(); }
-  speak(`I would play <span class="q">${escapeText(m.bestSan)}</span>. Remember it.`);
+  speak(`I'd play <span class="q">${escapeText(m.bestSan)}</span>. Remember it.`);
   setFeedback(`BEST <b>${escapeText(m.bestSan)}</b> ${formatEval(m.evalBest, m.mateBest, m.userColor)} <span class="dim">· you played ${escapeText(m.playedSan)}</span>`, 'info');
   setButtons({ next: true });
 }
@@ -420,6 +461,8 @@ window.__rmc = {
   get fastForward() { return FAST.on; },
   set fastForward(v) { FAST.on = !!v; },
   get hintActive() { return board.hasHighlight('hint-glow'); },
+  get lamp() { return getLampControl(); },
+  setLamp(t) { setLampControl(t); },
   submitUsername(name) { return doFetch(name); },
   pickGame(i) { return pickGame(i); },
   squareToClient(sq) { return board.squareCenter(sq, 0); },
