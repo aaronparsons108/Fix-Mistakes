@@ -29,6 +29,7 @@ export class Board3D {
     this.pieceAt = new Map();      // sq -> THREE.Group
     this.fx = [];                  // active highlight meshes {sq, cls, mesh}
     this.dots = [];                // legal-move markers
+    this._arrows = [];             // the loopy played-move arrow meshes
     this.selected = null;
     this.locked = false;
     this.raycaster = new THREE.Raycaster();
@@ -210,10 +211,35 @@ export class Board3D {
 
   hasHighlight(cls) { return this.fx.some((h) => h.cls === cls); }
 
-  // The old red "played" arrow is retired in the cabin; keep no-op-safe methods
-  // so the ported app flow doesn't throw.
-  drawArrow() {}
-  clearArrows() {}
+  // A loopy, translucent red arrow arcing above the board from `from` to `to`
+  // — used to show the move actually played in the game.
+  drawArrow(from, to, cls = 'played') {
+    this.clearArrows();
+    const a = this._sqLocal(from).setY(0.12);
+    const b = this._sqLocal(to).setY(0.12);
+    const dist = a.distanceTo(b);
+    // two raised control points, offset sideways, give a curling "loopy" arc
+    const dir = b.clone().sub(a); const side = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
+    const h = 0.7 + dist * 0.5;
+    const c1 = a.clone().lerp(b, 0.30); c1.y = h; c1.add(side.clone().multiplyScalar(dist * 0.22));
+    const c2 = a.clone().lerp(b, 0.70); c2.y = h; c2.add(side.clone().multiplyScalar(-dist * 0.22));
+    const curve = new THREE.CubicBezierCurve3(a, c1, c2, b);
+
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false });
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, 0.055, 10, false), mat);
+    this.group.add(tube);
+    // arrowhead at the destination, aligned to the curve's end tangent
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.34, 14), mat);
+    head.position.copy(curve.getPoint(0.98));
+    head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), curve.getTangent(1).normalize());
+    this.group.add(head);
+    this._arrows = [tube, head];
+  }
+
+  clearArrows() {
+    for (const m of this._arrows || []) { this.group.remove(m); m.geometry.dispose(); }
+    this._arrows = [];
+  }
 
   /* ── selection + legal dots ─────────────────────────── */
   clearSelection() {

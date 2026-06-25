@@ -279,6 +279,8 @@ function restoreHighlights(m) {
   if (m.prevMove) { board.highlight(m.prevMove.from, 'last-from'); board.highlight(m.prevMove.to, 'last-to'); }
   if (state.quiz.inCheck()) { const k = findKing(state.quiz, m.userColor); if (k) board.highlight(k, 'check'); }
   if (state.hintUsed) board.highlight(m.bestUci.slice(0, 2), 'hint-glow');
+  // the loopy red arrow to the move actually played in the game
+  board.drawArrow(m.playedUci.slice(0, 2), m.playedUci.slice(2, 4), 'played');
 }
 
 function findKing(chess, color) {
@@ -303,6 +305,7 @@ async function handleUserMove({ from, to, promotion }) {
   const session = state.session;
   const mv = state.quiz.move({ from, to, promotion });
   board.clearHighlights('hint-glow');
+  board.clearArrows();
   mv.captured ? sounds.capture() : sounds.move();
   await board.move(from, to, promotion);
   if (session !== state.session) return;
@@ -404,6 +407,7 @@ async function doReveal() {
   state.quiz = new Chess(m.fen);
   board.setPosition(m.fen);
   restoreHighlights(m);
+  board.clearArrows();   // the reveal shows the best move, not the played one
   setButtons({});
   await wait(350);
   if (session !== state.session) return;

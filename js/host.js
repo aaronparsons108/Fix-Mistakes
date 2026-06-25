@@ -56,23 +56,23 @@ export class Host {
 
   _eye(side) {
     const g = new THREE.Group();
-    g.position.set(side * 0.46, 1.62, 0.62);
+    g.position.set(side * 0.26, 1.92, 0.42);   // smaller, higher, on top of the head
     const white = new THREE.Mesh(
-      new THREE.SphereGeometry(0.3, 22, 18),
+      new THREE.SphereGeometry(0.17, 20, 16),
       new THREE.MeshStandardMaterial({ color: 0xf3ecd8, roughness: 0.4, emissive: 0x4a3414, emissiveIntensity: 0.5 })
     );
     const irisGrp = new THREE.Group();
     const iris = new THREE.Mesh(
-      new THREE.SphereGeometry(0.15, 16, 12),
+      new THREE.SphereGeometry(0.085, 14, 10),
       new THREE.MeshStandardMaterial({ color: 0x0c0703, roughness: 0.25, emissive: 0x180a00, emissiveIntensity: 0.6 })
     );
-    iris.position.z = 0.21;
+    iris.position.z = 0.12;
     irisGrp.add(iris);
     // eyelid: a full dome that sweeps down over the eye only during a blink;
     // hidden when open so it never shows as a line across the eyeball
     const lid = new THREE.Mesh(
-      new THREE.SphereGeometry(0.33, 22, 16),
-      new THREE.MeshStandardMaterial({ color: 0x241c16, roughness: 0.55 })
+      new THREE.SphereGeometry(0.19, 20, 14),
+      new THREE.MeshStandardMaterial({ color: 0x2a3a1c, roughness: 0.55 })
     );
     lid.scale.y = 0.02;
     lid.visible = false;
@@ -82,10 +82,10 @@ export class Host {
 
   _brow(side) {
     const b = new THREE.Mesh(
-      new THREE.BoxGeometry(0.42, 0.08, 0.12),
-      new THREE.MeshStandardMaterial({ color: 0x1a130d, roughness: 0.7 })
+      new THREE.BoxGeometry(0.26, 0.055, 0.1),
+      new THREE.MeshStandardMaterial({ color: 0x1a2410, roughness: 0.7 })
     );
-    b.position.set(side * 0.46, 1.96, 0.66);
+    b.position.set(side * 0.26, 2.12, 0.44);
     return b;
   }
 
@@ -97,7 +97,7 @@ export class Host {
     const target = worldPoint || new THREE.Vector3(0, 3.5, 7.5); // the player
     for (const e of [this.eyeL, this.eyeR]) {
       const local = this.group.worldToLocal(target.clone()).sub(e.g.position).normalize();
-      e.iris.position.set(local.x * 0.09, local.y * 0.06, 0.0);
+      e.iris.position.set(local.x * 0.05, local.y * 0.035, 0.0);
     }
   }
 
