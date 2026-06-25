@@ -7,7 +7,7 @@ import * as THREE from '../lib/three/three.module.js';
 import { Chess } from '../lib/chess.js';
 import { Engine, formatEval } from './engine.js';
 import { fetchPlayer, fetchLostGames } from './chesscom.js';
-import { analyzeGame, uciToSan } from './analysis.js';
+import { analyzeGame, parseGame, uciToSan } from './analysis.js';
 import { initScene, scene, camera, onFrame, flareCandles, setLampControl, getLampControl, getRopeKnob } from './scene.js';
 import { Board3D } from './board3d.js';
 import { Host, HOST_COLOR } from './host.js';
@@ -31,6 +31,7 @@ const state = {
   quiz: null, locked: true, attempts: 0, hintUsed: false, replaying: false,
   session: 0, stats: null, results: [],
   gaze: null,
+  allMoves: [], playing: false, skipPlayback: false,
 };
 
 let board, host, paper;
@@ -98,6 +99,9 @@ canvas.addEventListener('pointermove', (e) => {
 const ropeEnd = () => { if (ropeDrag) { ropeDrag = null; canvas.style.cursor = ''; } };
 canvas.addEventListener('pointerup', ropeEnd, true);
 canvas.addEventListener('pointercancel', ropeEnd, true);
+
+// click anywhere on the board to skip the move-by-move playback
+canvas.addEventListener('pointerdown', () => { if (state.playing) state.skipPlayback = true; });
 
 // pick games / advance summary by clicking the parchment
 canvas.addEventListener('click', (e) => {
@@ -208,6 +212,7 @@ async function backToGames(line) {
 
 function startQuiz(moments) {
   state.moments = moments;
+  state.allMoves = parseGame(state.game.pgn);
   state.idx = 0;
   state.results = new Array(moments.length).fill(null);
   state.stats = { first: 0, solved: 0, accepted: 0, revealed: 0, hints: 0, retries: 0 };
@@ -218,8 +223,9 @@ async function loadPuzzle(i) {
   state.idx = i;
   const session = ++state.session;
   const m = state.moments[i];
-  state.quiz = new Chess(m.fen);
   state.locked = true;
+  state.playing = true;
+  state.skipPlayback = false;
   state.attempts = 0;
   state.hintUsed = false;
   state.replaying = false;
@@ -228,26 +234,43 @@ async function loadPuzzle(i) {
   $('quiz-hud').hidden = false;
   board.setOrientation(m.userColor);
   renderCounter();
+  $('hud-turn').textContent = '';
+  showBestEval(m);
+  setButtons({});
+  speak(i === 0 ? "Watch how it happened…" : 'And it continues…');
+  setFeedback('<span class="dim">click the board to skip ahead</span>', 'info');
+
+  // play the game's actual moves, one by one, up to this critical position
+  const startPly = i === 0 ? 0 : state.moments[i - 1].ply;
+  const startFen = i === 0 ? START_FEN : state.moments[i - 1].fen;
+  board.clearHighlights();
+  board.setPosition(startFen);
+  await wait(450);
+  if (session !== state.session) return;
+  for (let p = startPly; p < m.ply; p++) {
+    if (state.skipPlayback) break;
+    const mv = state.allMoves[p];
+    board.clearHighlights('last-from'); board.clearHighlights('last-to');
+    board.highlight(mv.from, 'last-from');
+    state.gaze = board.squareWorld(mv.to, 0.4);
+    mv.captured ? sounds.capture() : sounds.move();
+    await board.move(mv.from, mv.to, mv.promotion);
+    if (session !== state.session) return;
+    board.highlight(mv.to, 'last-to');
+    await wait(360);
+    if (session !== state.session) return;
+  }
+
+  // settle exactly on the critical position and hand over to the player
+  board.setPosition(m.fen);
+  state.quiz = new Chess(m.fen);
+  restoreHighlights(m);
+  state.playing = false;
+  state.gaze = null;
   $('hud-turn').textContent = (m.userColor === 'w' ? 'WHITE' : 'BLACK') + ' TO MOVE';
   setFeedback('', '');
-  showBestEval(m);
   setButtons({ hint: true, idk: true });
   speak(`Move ${m.moveNumber}. Here's where it <span class="q">went wrong</span>. Find the move you should have played.`);
-
-  // replay the opponent's previous move so the moment reads
-  if (m.prevMove) {
-    board.setPosition(m.prevMove.before);
-    state.gaze = board.squareWorld(m.prevMove.to, 0.4);
-    await wait(500);
-    if (session !== state.session) return;
-    sounds.move();
-    await board.move(m.prevMove.from, m.prevMove.to, m.prevMove.promotion);
-    if (session !== state.session) return;
-  } else {
-    board.setPosition(m.fen);
-  }
-  restoreHighlights(m);
-  state.gaze = null;
   state.locked = false;
 }
 
@@ -442,7 +465,9 @@ $('btn-accept').addEventListener('click', () => {
 $('btn-next').addEventListener('click', () => { state.session++; nextPuzzle(); });
 
 document.addEventListener('keydown', (e) => {
-  if (state.phase !== 'QUIZ' || !state.quiz) return;
+  if (state.phase !== 'QUIZ') return;
+  if (state.playing) { state.skipPlayback = true; return; }
+  if (!state.quiz) return;
   if (e.key === 'ArrowLeft') { sounds.tick(); setFeedback('', ''); retryCurrent(); }
   else if (e.key === 'ArrowRight') { if (!$('btn-next').hidden) $('btn-next').click(); }
 });
@@ -463,6 +488,7 @@ window.__rmc = {
   get fastForward() { return FAST.on; },
   set fastForward(v) { FAST.on = !!v; },
   get hintActive() { return board.hasHighlight('hint-glow'); },
+  get busy() { return state.locked || state.playing; },
   get lamp() { return getLampControl(); },
   setLamp(t) { setLampControl(t); },
   submitUsername(name) { return doFetch(name); },

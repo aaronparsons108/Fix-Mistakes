@@ -81,7 +81,8 @@ try {
   check(true, 'analysis completes and the quiz begins (QUIZ)');
   const total = await page.evaluate(() => window.__rmc.results.length);
   console.log(`     (analysis found ${total} critical moments)`);
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => !window.__rmc.busy, { timeout: 30000 }); // move-by-move playback finishes
+  check(true, 'plays through the game to the critical position');
   await page.screenshot({ path: SHOTS + 'cabin-3-quiz.png' });
 
   // REAL raycast move: best move on puzzle 1 is Nxd4 (f3 -> d4)
@@ -104,7 +105,7 @@ try {
   // advance to puzzle 2
   await page.evaluate(() => window.__rmc.next());
   await page.waitForFunction(() => window.__rmc.puzzleIndex === 1, { timeout: 15000 });
-  await page.waitForTimeout(200);
+  await page.waitForFunction(() => !window.__rmc.busy, { timeout: 30000 });
 
   // hint persists through a wrong move
   await page.evaluate(() => window.__rmc.hint());
@@ -122,7 +123,7 @@ try {
   for (let p = 2; p < total; p++) {
     await page.evaluate(() => window.__rmc.next());
     await page.waitForFunction((n) => window.__rmc.puzzleIndex === n, p, { timeout: 15000 });
-    await page.waitForTimeout(120);
+    await page.waitForFunction(() => !window.__rmc.busy, { timeout: 30000 });
     await page.evaluate(() => window.__rmc.reveal());
     await page.waitForFunction(() => !document.getElementById('btn-next').hidden, { timeout: 15000 });
   }
