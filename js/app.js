@@ -249,19 +249,6 @@ async function loadPuzzle(i, sweepText) {
   $('board-meta-bottom').textContent = `${state.username} (${g.userRating ?? '?'}) — you`;
 
   renderCounter();
-  const fromStr = formatEval(m.evalBest, m.mateBest, m.userColor);
-  const toStr = formatEval(m.evalAfterPlayed, m.mateAfterPlayed, m.userColor);
-  // derive the drop from the rounded values so the arithmetic visibly adds up
-  const dropStr = m.mateBest == null && m.mateAfterPlayed == null
-    ? (parseFloat(fromStr) - parseFloat(toStr)).toFixed(1)
-    : (m.drop / 100).toFixed(1);
-  // compact facts (the dashed red arrow on the board marks this move)
-  $('puzzle-context').innerHTML =
-    `<span class="fact-k">IN GAME</span>` +
-    `<span class="played-move">${escapeHtml(m.playedSan)}</span>` +
-    `<span class="fact-sev">${m.severity}</span>` +
-    `<span class="fact-swing">${fromStr} → ${toStr}</span>` +
-    `<span class="fact-drop">−${dropStr}</span>`;
   $('turn-banner').textContent = `${m.userColor === 'w' ? 'WHITE' : 'BLACK'} TO MOVE`;
   setFeedback('', '');
   showEvalGraph(m);
@@ -295,6 +282,8 @@ function restoreHighlights(m) {
     const king = findKing(state.quiz, m.userColor);
     if (king) board.highlight(king, 'check');
   }
+  // keep the hint visible across wrong tries until the puzzle is solved
+  if (state.hintUsed) board.highlight(m.bestUci.slice(0, 2), 'hint-glow');
 }
 
 function findKing(chess, color) {
@@ -342,10 +331,10 @@ function showEvalGraph(m) {
     </div>`;
   const g = $('eval-graph');
   g.innerHTML =
-    row('BEST', 'best', formatEval(m.evalBest, m.mateBest, m.userColor)) +
-    row('YOURS', 'you', '—') +
     row('GAME', 'game', formatEval(m.evalAfterPlayed, m.mateAfterPlayed, m.userColor)) +
-    '<div class="eg-axis"><span>← worse for you</span><span>better for you →</span></div>';
+    row('YOURS', 'you', '—') +
+    row('BEST', 'best', formatEval(m.evalBest, m.mateBest, m.userColor)) +
+    '<div class="eg-axis"><span>← worse</span><span>better →</span></div>';
   g.hidden = false;
   requestAnimationFrame(() => {
     setGraphBar('best', bestCp);

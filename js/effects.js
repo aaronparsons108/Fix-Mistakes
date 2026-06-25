@@ -4,13 +4,13 @@
 
 const fxLayer = () => document.getElementById('fx-layer');
 
-// Red / black / white theme. Verdict bursts run white (best) → deep red (bad).
+// Move-quality bursts on the traffic-light scale (green→yellow→orange→red).
 const PALETTES = {
-  ok:    ['#ffffff', '#f0f0f2', '#d8d8db', '#c9c9cc'],
-  great: ['#ffffff', '#f0f0f2', '#d8d8db', '#c9c9cc'],
-  warn:  ['#ff2636', '#ff5a67', '#b3000f', '#ffd0d4'],
-  bad:   ['#c1121f', '#ff2636', '#7a000a', '#ff8a93'],
-  info:  ['#ffffff', '#ff6b75', '#ff2636', '#e6e6e8'],
+  ok:    ['#34d399', '#6ee7b7', '#a7f3d0', '#ffffff'],
+  great: ['#fbbf24', '#fcd34d', '#fde68a', '#ffffff'],
+  warn:  ['#fb8c3c', '#fdba74', '#ffd9b0', '#fff1e6'],
+  bad:   ['#ff4d5e', '#ff8a96', '#ff2636', '#ffd0d4'],
+  info:  ['#8ab4ff', '#bcd4ff', '#5b8def', '#ffffff'],
 };
 
 // Radial burst shooting out from under a point (e.g. a just-moved piece).
@@ -92,7 +92,7 @@ export function sweep(label = '') {
 
 export function confetti({ count = 120 } = {}) {
   const layer = fxLayer();
-  const colors = ['#ff2636', '#ffffff', '#b3000f', '#ff6b75', '#e6e6e8', '#7a000a'];
+  const colors = ['#34d399', '#fbbf24', '#fb8c3c', '#ff4d5e', '#8ab4ff', '#ffffff'];
   const w = window.innerWidth;
   for (let i = 0; i < count; i++) {
     const c = document.createElement('div');

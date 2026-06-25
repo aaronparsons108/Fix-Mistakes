@@ -126,7 +126,9 @@ try {
   );
   await page.waitForTimeout(2500);
 
-  // Puzzle 2: deliberately play a bad move (a2-a3), expect retry flow
+  // Puzzle 2: use a hint, then deliberately play a bad move (a2-a3)
+  await page.click('#btn-hint');
+  await page.waitForSelector('.square.hint-glow', { timeout: 5000 });
   await clickSquare(page, board, 'a2');
   await page.waitForTimeout(250);
   await clickSquare(page, board, 'a3');
@@ -138,6 +140,9 @@ try {
   });
   check(youBar.width > 0 && youBar.val !== '—', `eval graph shows the attempt (width ${youBar.width}%, ${youBar.val})`);
   await page.screenshot({ path: SHOTS + '7-wrong.png' });
+  await page.waitForTimeout(1500); // board auto-resets
+  const glowPersists = await page.locator('.square.hint-glow').count();
+  check(glowPersists >= 1, 'hint highlight persists through a wrong move');
   await page.keyboard.press('ArrowLeft'); // ← resets immediately for another try
   await page.waitForTimeout(600);
 
