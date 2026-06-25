@@ -2,163 +2,67 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ReviseMyChess — Fix Your Chess Mistakes</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Revise My Chess — the cabin</title>
 <link rel="stylesheet" href="css/style.css" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>♞</text></svg>" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='82' font-size='80'>♟</text></svg>" />
 </head>
-<body class="is3d">
-<div class="bg-grid" aria-hidden="true"></div>
-<div class="bg-glow" aria-hidden="true"></div>
+<body>
+<canvas id="webgl"></canvas>
 
-<header class="topbar">
-  <button class="brand" id="brand-home" title="Home">
-    <span class="brand-knight">♞</span>
-    <span class="brand-name">REVISE<em>MYCHESS</em></span>
-  </button>
-  <div class="topbar-right">
-    <button id="btn-3d" class="icon-btn" title="Toggle 3D board">♟ 3D</button>
-    <button id="btn-sound" class="icon-btn" title="Toggle sound">🔊</button>
-  </div>
-</header>
+<!-- floating verdict labels rendered over the canvas -->
+<div id="fx" aria-hidden="true"></div>
 
-<main id="app">
+<!-- the host's voice -->
+<div id="host-speech" class="speech" hidden><span id="speech-text"></span></div>
 
-  <!-- ░░ LANDING ░░ -->
-  <section class="screen active" id="screen-landing">
-    <div class="hero">
-      <div class="hero-pieces" aria-hidden="true">
-        <span>♜</span><span>♞</span><span>♛</span><span>♚</span><span>♝</span><span>♟</span>
-      </div>
-      <h1 class="hero-title">
-        <span class="line-1">FIX YOUR</span>
-        <span class="line-2 glitch" data-text="MISTAKES">MISTAKES</span>
-      </h1>
-      <p class="hero-sub">
-        We pull your <strong>chess.com</strong> games, run them through
-        <strong>Stockfish</strong>, find the exact moments you threw the game away —
-        and make you replay them until you get it right.
-      </p>
-      <form id="username-form" class="username-form" autocomplete="off">
-        <div class="input-wrap">
-          <span class="input-icon">♟</span>
-          <input id="username-input" type="text" placeholder="chess.com username" spellcheck="false" required />
-        </div>
-        <button type="submit" class="btn btn-primary btn-big" id="btn-analyze">
-          ANALYZE MY GAMES <span class="btn-arrow">→</span>
-        </button>
-      </form>
-      <p class="hero-error" id="landing-error" hidden></p>
-      <div class="hero-steps">
-        <div class="step"><span class="step-num">1</span>Fetch your recent losses</div>
-        <div class="step"><span class="step-num">2</span>Stockfish hunts your blunders</div>
-        <div class="step"><span class="step-num">3</span>Replay them — find the best move</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ░░ GAME PICKER ░░ -->
-  <section class="screen" id="screen-games">
-    <div class="panel-head">
-      <h2>YOUR RECENT <span class="accent-red">LOSSES</span></h2>
-      <p class="panel-sub" id="games-sub">Pick a game to dissect. We'll find where it went wrong.</p>
-    </div>
-    <div class="games-grid" id="games-grid"></div>
-    <div class="center-row">
-      <button class="btn btn-ghost" id="btn-back-landing">← different player</button>
-    </div>
-  </section>
-
-  <!-- ░░ ANALYSIS LOADING ░░ -->
-  <section class="screen" id="screen-loading">
-    <div class="loading-stage">
-      <div class="promo-loader" aria-hidden="true">
-        <div class="promo-shadow"></div>
-        <div class="promo-piece" id="promo-piece">♟</div>
-      </div>
-      <h2 class="loading-title" id="loading-title">ANALYZING</h2>
-      <p class="loading-status" id="loading-status">Waking up Stockfish…</p>
-      <div class="progress-track">
-        <div class="progress-fill" id="progress-fill"></div>
-        <div class="progress-spark" id="progress-spark"></div>
-      </div>
-      <p class="loading-quip" id="loading-quip"></p>
-    </div>
-  </section>
-
-  <!-- ░░ QUIZ ░░ -->
-  <section class="screen" id="screen-quiz">
-    <div class="quiz-layout">
-      <div class="board-zone">
-        <div class="board-meta" id="board-meta-top"></div>
-        <div class="scene">
-          <div class="table" aria-hidden="true">
-            <div class="table-grain"></div>
-          </div>
-          <div class="board-frame" id="board-frame">
-            <div class="board-rim" aria-hidden="true"></div>
-            <div id="board" class="board"></div>
-          </div>
-        </div>
-        <div class="board-meta" id="board-meta-bottom"></div>
-      </div>
-      <aside class="quiz-panel">
-        <div class="puzzle-counter" id="puzzle-counter"></div>
-        <div class="turn-banner" id="turn-banner"></div>
-        <div class="eval-graph" id="eval-graph" hidden></div>
-        <div class="feedback" id="feedback"></div>
-        <div class="quiz-actions" id="quiz-actions">
-          <button class="btn btn-ghost" id="btn-hint">💡 Hint</button>
-          <button class="btn btn-ghost" id="btn-idk">🤷 I don't know</button>
-          <button class="btn btn-primary" id="btn-retry" hidden>↻ Try again</button>
-          <button class="btn btn-good" id="btn-accept" hidden>Keep it → next</button>
-          <button class="btn btn-primary" id="btn-next" hidden>Next →</button>
-        </div>
-        <div class="key-hint">←&nbsp; retry &nbsp;·&nbsp; →&nbsp; next</div>
-        <div class="mini-thinking" id="mini-thinking" hidden>
-          <span class="mini-pawn">♟</span> judging…
-        </div>
-      </aside>
-    </div>
-  </section>
-
-  <!-- ░░ SUMMARY ░░ -->
-  <section class="screen" id="screen-summary">
-    <div class="summary-card">
-      <h2 class="summary-title" id="summary-title">SESSION COMPLETE</h2>
-      <p class="summary-rank" id="summary-rank"></p>
-      <div class="stats-row" id="stats-row"></div>
-      <div class="summary-detail" id="summary-detail"></div>
-      <div class="center-row gap">
-        <button class="btn btn-primary btn-big" id="btn-another">TRAIN ANOTHER GAME</button>
-        <button class="btn btn-ghost" id="btn-new-player">new player</button>
-      </div>
-    </div>
-  </section>
-
-</main>
-
-<!-- transition sweep overlay -->
-<div id="sweep" class="sweep" aria-hidden="true">
-  <div class="sweep-label" id="sweep-label"></div>
+<!-- corner controls -->
+<div id="corner">
+  <button id="btn-rename" class="rune-btn" title="Give a different name" hidden>✎ name</button>
+  <button id="btn-sound" class="rune-btn" title="Toggle sound">♪</button>
 </div>
 
-<!-- particle / fx layer -->
-<div id="fx-layer" aria-hidden="true"></div>
+<!-- username prompt (parchment scrap) -->
+<div id="username-panel" class="parchment scrap" hidden>
+  <form id="username-form" autocomplete="off">
+    <label for="username-input">Whisper thy chess.com name</label>
+    <div class="field-row">
+      <input id="username-input" type="text" placeholder="chess.com username" spellcheck="false" required />
+      <button type="submit" id="username-go" class="ink-btn">tell him →</button>
+    </div>
+    <p id="username-error" class="err" hidden></p>
+  </form>
+</div>
+
+<!-- quiz HUD (parchment strip) -->
+<div id="quiz-hud" class="parchment" hidden>
+  <div class="hud-top">
+    <span id="hud-counter"></span>
+    <span id="hud-turn"></span>
+  </div>
+  <div id="hud-feedback" class="hud-feedback"></div>
+  <div id="hud-eval" class="hud-eval"></div>
+  <div id="hud-actions">
+    <button class="ink-btn" id="btn-hint">✦ hint</button>
+    <button class="ink-btn" id="btn-idk">I don't know</button>
+    <button class="ink-btn" id="btn-retry" hidden>↺ try again</button>
+    <button class="ink-btn good" id="btn-accept" hidden>keep it →</button>
+    <button class="ink-btn go" id="btn-next" hidden>next →</button>
+  </div>
+  <div class="hud-hint">←&nbsp;retry&nbsp;·&nbsp;→&nbsp;next</div>
+</div>
 
 <!-- promotion picker -->
-<div id="promo-modal" class="promo-modal" hidden>
-  <div class="promo-box">
-    <p>Promote to</p>
-    <div class="promo-choices" id="promo-choices"></div>
+<div id="promo-modal" class="modal" hidden>
+  <div class="parchment scrap">
+    <p>Carve it into…</p>
+    <div id="promo-choices" class="promo-choices"></div>
   </div>
 </div>
 
-<!-- toast -->
+<!-- boot + status -->
 <div id="toast" class="toast" hidden></div>
+<div id="boot" class="boot"><span class="boot-flame">🕯</span> lighting the candles…</div>
 
 <script type="module" src="js/app.js"></script>
 </body>

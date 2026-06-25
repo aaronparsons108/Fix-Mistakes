@@ -1,266 +1,204 @@
-// ReviseMyChess — main controller. Wires together: chess.com fetch → Stockfish
-// analysis → critical-moment quiz loop → session summary.
+// Revise My Chess — "the cabin". Flow orchestrator: boots straight into the
+// candlelit 3D scene, the pawn host asks for a chess.com name, slides a paper
+// of recent losses, then quizzes the player's blunders on the real 3D board.
+// Reuses chesscom.js / engine.js / analysis.js / chess.js / stockfish unchanged.
 
 import { Chess } from '../lib/chess.js';
 import { Engine, formatEval } from './engine.js';
 import { fetchPlayer, fetchLostGames } from './chesscom.js';
 import { analyzeGame, uciToSan } from './analysis.js';
-import { Board } from './board.js';
-import { burst, floatLabel, shake, sweep, confetti } from './effects.js';
+import { initScene, scene, camera, onFrame, flareCandles } from './scene.js';
+import { Board3D } from './board3d.js';
+import { Host } from './host.js';
+import { Paper } from './paper.js';
+import { FAST, wait } from './tween.js';
 import { sounds, toggleMute, isMuted } from './sound.js';
+import { floatLabel, sparkle, speak, hush, toast, askPromotion } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
-const ANALYSIS_DEPTH = 12;
-const JUDGE_DEPTH = 13;
-
-// thresholds (centipawns lost vs the engine's best move)
-const BEST_TOLERANCE = 25;
-const GREAT_TOLERANCE = 80;
-const GOOD_TOLERANCE = 160;
-
-const QUIPS = [
-  'Stockfish never misses. You, on the other hand…',
-  'Scanning for moments of regret…',
-  'Your pieces remember everything.',
-  'Calculating 3 million positions per second. No pressure.',
-  'Somewhere in this game, a queen cried.',
-  'Hindsight is 20/20. Stockfish is 3500.',
-  'Finding the moves that haunt you…',
-  'Every blunder is a lesson wearing a disguise.',
-];
+const ANALYSIS_DEPTH = 12, JUDGE_DEPTH = 13;
+const BEST_TOL = 25, GREAT_TOL = 80, GOOD_TOL = 160;
+const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 const state = {
   engine: new Engine(),
-  username: null,
-  games: [],
-  game: null,
-  moments: [],
-  idx: 0,
-  quiz: null,           // Chess instance at the current puzzle position
-  locked: true,
-  attempts: 0,
-  hintUsed: false,
-  replaying: false,     // re-attempting an already-resolved puzzle (don't re-score)
-  session: 0,           // token to cancel stale timers when user skips ahead
-  stats: null,
-  results: [],          // per-puzzle: 'first' | 'solved' | 'accepted' | 'revealed'
+  phase: 'BOOT',
+  username: null, games: [], game: null,
+  moments: [], idx: 0,
+  quiz: null, locked: true, attempts: 0, hintUsed: false, replaying: false,
+  session: 0, stats: null, results: [],
+  gaze: null,
 };
 
-/* ───────────────────────── screens ───────────────────────── */
+let board, host, paper;
 
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
-  const el = $(id);
-  el.classList.remove('active');
-  void el.offsetWidth;
-  el.classList.add('active');
-}
+/* ───────────────────────── boot ───────────────────────── */
 
-function toast(msg, ms = 4200) {
-  const t = $('toast');
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.hidden = true; }, ms);
-}
+const headless = navigator.webdriver === true || new URLSearchParams(location.search).has('headless');
+const canvas = $('webgl');
+initScene(canvas, { headless });
+board = new Board3D(scene, camera, {
+  canMove: () => state.phase === 'QUIZ' && !state.locked,
+  getLegalMoves: (sq) => {
+    if (!state.quiz) return [];
+    return state.quiz.moves({ square: sq, verbose: true });
+  },
+  onUserMove: handleUserMove,
+});
+board.setOrientation('w');
+board.setPosition(START_FEN);
+host = new Host(scene);
+paper = new Paper(scene, camera);
+board.bindPointer(canvas);
 
-/* ───────────────────────── landing ───────────────────────── */
+onFrame((t, dt) => {
+  host.update(t, dt);
+  host.lookAt(state.gaze);
+  board.pulse(t);
+});
 
-$('username-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const username = $('username-input').value.trim();
-  if (!username) return;
-  const err = $('landing-error');
-  err.hidden = true;
-  const btn = $('btn-analyze');
-  btn.disabled = true;
-  btn.textContent = 'FETCHING…';
-  state.engine.init().catch(() => {}); // warm up the engine in parallel
-
-  try {
-    await fetchPlayer(username);
-    const games = await fetchLostGames(username);
-    if (games.length === 0) {
-      throw new Error(`No recent losses found for "${username}". Either you're unbeatable or you haven't played lately.`);
-    }
-    state.username = username;
-    state.games = games;
-    renderGames();
-    await sweep('YOUR LOSSES, EXAMINED');
-    showScreen('screen-games');
-  } catch (ex) {
-    err.textContent = ex.code === 404
-      ? `Player "${username}" not found on chess.com.`
-      : ex.message || 'Could not reach chess.com. Check your connection.';
-    err.hidden = false;
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = 'ANALYZE MY GAMES <span class="btn-arrow">→</span>';
+// pick games / advance summary by clicking the parchment
+canvas.addEventListener('click', (e) => {
+  if (state.phase === 'PICK_GAME') {
+    const i = paper.pick(e.clientX, e.clientY);
+    if (i >= 0) pickGame(i);
+  } else if (state.phase === 'SUMMARY') {
+    const i = paper.pick(e.clientX, e.clientY);
+    if (i >= 0 || true) backToGames();
   }
 });
 
-$('btn-back-landing').addEventListener('click', () => showScreen('screen-landing'));
-$('brand-home').addEventListener('click', () => showScreen('screen-landing'));
+async function boot() {
+  state.engine.init().catch(() => {}); // warm the engine
+  await wait(400);
+  $('boot').classList.add('gone');
+  setPhase('ASK_USERNAME');
+  speak(`You look <span class="q">lost</span>. Sit. Whisper me thy <span class="q">chess.com</span> name… and I shall show thee where the games <span class="q">slipped away</span>.`);
+  $('username-panel').hidden = false;
+  $('username-input').focus?.();
+}
+boot();
 
-/* ─────────────────────── game picker ─────────────────────── */
+function setPhase(p) { state.phase = p; }
 
-function renderGames() {
-  const grid = $('games-grid');
-  grid.innerHTML = '';
-  $('games-sub').textContent =
-    `${state.username} — ${state.games.length} recent losses. Pick one to dissect.`;
-  state.games.forEach((g, i) => {
-    const card = document.createElement('button');
-    card.className = 'game-card';
-    card.style.animationDelay = `${Math.min(i * 60, 600)}ms`;
-    const date = g.endTime
-      ? g.endTime.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-      : '';
-    card.innerHTML = `
-      <div class="gc-top">
-        <span class="gc-opp">vs ${escapeHtml(g.opponent)}</span>
-        <span class="gc-rating">${g.opponentRating ?? '?'}</span>
-      </div>
-      <div class="gc-tags">
-        <span class="tag loss">${escapeHtml(g.resultReason)}</span>
-        <span class="tag">${escapeHtml(g.timeClass)}</span>
-        <span class="tag color-${g.userColor}">${g.userColor === 'w' ? '♔ white' : '♚ black'}</span>
-        ${g.rated ? '<span class="tag">rated</span>' : ''}
-      </div>
-      <div class="gc-date">${date}</div>`;
-    card.addEventListener('click', () => startAnalysis(g));
-    grid.appendChild(card);
-  });
+/* ─────────────────── username → fetch ──────────────────── */
+
+$('username-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = $('username-input').value.trim();
+  if (name) doFetch(name);
+});
+$('btn-rename').addEventListener('click', () => {
+  if (state.phase === 'FETCHING') return;
+  paper.slideOut();
+  setPhase('ASK_USERNAME');
+  $('btn-rename').hidden = true;
+  $('quiz-hud').hidden = true;
+  $('username-panel').hidden = false;
+  $('username-error').hidden = true;
+  speak('Another name, then? Whisper it.');
+  $('username-input').focus?.();
+});
+
+async function doFetch(name) {
+  setPhase('FETCHING');
+  const err = $('username-error'); err.hidden = true;
+  const go = $('username-go'); go.disabled = true; go.textContent = 'he listens…';
+  speak('Hmm. Let me <span class="q">remember</span> thy defeats…');
+  try {
+    await fetchPlayer(name);
+    const games = await fetchLostGames(name);
+    if (!games.length) throw new Error('No losses? Either thou art unbeatable, or thou art a liar.');
+    state.username = name; state.games = games;
+    $('username-panel').hidden = true;
+    $('btn-rename').hidden = false;
+    setPhase('PICK_GAME');
+    speak(`So many, ${escapeText(name)}. <span class="q">Choose</span> one to relive.`, { });
+    paper.drawGameList(games);
+    host.leanIn();
+    await paper.slideIn();
+    await host.leanBack();
+  } catch (ex) {
+    setPhase('ASK_USERNAME');
+    err.textContent = ex.code === 404 ? `I know no soul named "${name}".` : (ex.message || 'The candle guttered — try again.');
+    err.hidden = false;
+    speak('That name means nothing to me.');
+  } finally {
+    go.disabled = false; go.textContent = 'tell him →';
+  }
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
+/* ─────────────────── pick game → analyze ───────────────── */
 
-/* ─────────────────────── analysis phase ───────────────────── */
-
-const LOADER_GLYPHS = ['♟', '♞', '♝', '♜', '♛'];
-let loaderTimer = null;
-let quipTimer = null;
-
-function startLoader() {
-  const piece = $('promo-piece');
-  piece.classList.add('morphing');
-  let gi = 0;
-  piece.textContent = LOADER_GLYPHS[0];
-  loaderTimer = setInterval(() => {
-    gi = (gi + 1) % LOADER_GLYPHS.length;
-    // swap the glyph mid-bounce, when the morph flash whites it out
-    setTimeout(() => { piece.textContent = LOADER_GLYPHS[gi]; }, 450);
-  }, 900);
-
-  const quip = $('loading-quip');
-  let qi = Math.floor(Math.random() * QUIPS.length);
-  quip.textContent = QUIPS[qi];
-  quipTimer = setInterval(() => {
-    quip.style.opacity = 0;
-    setTimeout(() => {
-      qi = (qi + 1) % QUIPS.length;
-      quip.textContent = QUIPS[qi];
-      quip.style.opacity = 1;
-    }, 400);
-  }, 3400);
-}
-
-function stopLoader() {
-  clearInterval(loaderTimer);
-  clearInterval(quipTimer);
-  $('promo-piece').classList.remove('morphing');
-}
-
-async function startAnalysis(game) {
+async function pickGame(i) {
+  const game = state.games[i];
+  if (!game) return;
   state.game = game;
-  $('progress-fill').style.width = '0%';
-  $('loading-status').textContent = 'Waking up Stockfish…';
-  await sweep('ENTERING THE LAB');
-  showScreen('screen-loading');
-  startLoader();
-
+  setPhase('ANALYZING');
+  sounds.tick();
+  await paper.slideOut();
+  speak('Let us see how it <span class="q">unravelled</span>…');
+  flareCandles();
   try {
     await state.engine.init();
-    const { moments } = await analyzeGame(game, state.engine, {
-      depth: ANALYSIS_DEPTH,
-      onProgress: (done, total) => {
-        $('progress-fill').style.width = `${Math.round((done / total) * 100)}%`;
-        $('loading-status').textContent = `Evaluating position ${done} of ${total}`;
-      },
-    });
-    stopLoader();
-    if (moments.length === 0) {
-      toast('No significant mistakes found in that game — your opponent simply outplayed you. Try another!', 6000);
-      showScreen('screen-games');
+    const { moments } = await analyzeGame(game, state.engine, { depth: ANALYSIS_DEPTH });
+    if (!moments.length) {
+      speak('No grand blunder here — thou wert simply <span class="q">outplayed</span>. Choose another.');
+      backToGames();
       return;
     }
     startQuiz(moments);
   } catch (ex) {
-    stopLoader();
-    console.error(ex);
-    toast('Analysis failed: ' + (ex.message || ex), 6000);
-    showScreen('screen-games');
+    toast('The reading failed: ' + (ex.message || ex));
+    backToGames();
   }
 }
 
-/* ────────────────────────── quiz ──────────────────────────── */
+async function backToGames() {
+  setPhase('PICK_GAME');
+  $('quiz-hud').hidden = true;
+  hush();
+  speak(`<span class="q">Choose</span> one to relive.`);
+  paper.drawGameList(state.games);
+  host.leanIn(); await paper.slideIn(); await host.leanBack();
+}
 
-const board = new Board($('board'), {
-  canMove: () => !state.locked,
-  getLegalMoves: (sq) => {
-    if (!state.quiz) return [];
-    const seen = new Set();
-    return state.quiz.moves({ square: sq, verbose: true }).filter((m) => {
-      if (seen.has(m.to)) return false;
-      seen.add(m.to);
-      return true;
-    });
-  },
-  onUserMove: handleUserMove,
-});
+/* ────────────────────────── quiz ───────────────────────── */
 
 function startQuiz(moments) {
   state.moments = moments;
   state.idx = 0;
   state.results = new Array(moments.length).fill(null);
   state.stats = { first: 0, solved: 0, accepted: 0, revealed: 0, hints: 0, retries: 0 };
-  loadPuzzle(0, `CRITICAL MOMENT 1 / ${moments.length}`);
+  loadPuzzle(0);
 }
 
-async function loadPuzzle(i, sweepText) {
+async function loadPuzzle(i) {
   state.idx = i;
   const session = ++state.session;
   const m = state.moments[i];
-  const g = state.game;
-
   state.quiz = new Chess(m.fen);
   state.locked = true;
   state.attempts = 0;
   state.hintUsed = false;
   state.replaying = false;
+  setPhase('QUIZ');
 
-  await sweep(sweepText);
-  showScreen('screen-quiz');
-
+  $('quiz-hud').hidden = false;
   board.setOrientation(m.userColor);
-  $('board-meta-top').textContent = `${g.opponent} (${g.opponentRating ?? '?'})`;
-  $('board-meta-bottom').textContent = `${state.username} (${g.userRating ?? '?'}) — you`;
-
   renderCounter();
-  $('turn-banner').textContent = `${m.userColor === 'w' ? 'WHITE' : 'BLACK'} TO MOVE`;
+  $('hud-turn').textContent = (m.userColor === 'w' ? 'WHITE' : 'BLACK') + ' TO MOVE';
   setFeedback('', '');
-  showEvalGraph(m);
+  showBestEval(m);
   setButtons({ hint: true, idk: true });
-  $('mini-thinking').hidden = true;
+  speak(`Move ${m.moveNumber}. Here thou <span class="q">faltered</span>. Find the move thou should’st have played.`);
 
-  // Replay the opponent's previous move so the player sees what just happened.
+  // replay the opponent's previous move so the moment reads
   if (m.prevMove) {
     board.setPosition(m.prevMove.before);
-    await delay(550);
+    state.gaze = board.squareWorld(m.prevMove.to, 0.4);
+    await wait(500);
     if (session !== state.session) return;
     sounds.move();
     await board.move(m.prevMove.from, m.prevMove.to, m.prevMove.promotion);
@@ -269,122 +207,30 @@ async function loadPuzzle(i, sweepText) {
     board.setPosition(m.fen);
   }
   restoreHighlights(m);
+  state.gaze = null;
   state.locked = false;
 }
 
 function restoreHighlights(m) {
   board.clearHighlights();
-  board.clearArrows();
-  board.drawArrow(m.playedUci.slice(0, 2), m.playedUci.slice(2, 4), 'played');
-  if (m.prevMove) {
-    board.highlight(m.prevMove.from, 'last-from');
-    board.highlight(m.prevMove.to, 'last-to');
-  }
-  if (state.quiz.inCheck()) {
-    const king = findKing(state.quiz, m.userColor);
-    if (king) board.highlight(king, 'check');
-  }
-  // keep the hint visible across wrong tries until the puzzle is solved
+  if (m.prevMove) { board.highlight(m.prevMove.from, 'last-from'); board.highlight(m.prevMove.to, 'last-to'); }
+  if (state.quiz.inCheck()) { const k = findKing(state.quiz, m.userColor); if (k) board.highlight(k, 'check'); }
   if (state.hintUsed) board.highlight(m.bestUci.slice(0, 2), 'hint-glow');
 }
 
 function findKing(chess, color) {
-  for (const row of chess.board()) {
-    for (const cell of row) {
-      if (cell && cell.type === 'k' && cell.color === color) return cell.square;
-    }
-  }
+  for (const row of chess.board()) for (const c of row) if (c && c.type === 'k' && c.color === color) return c.square;
   return null;
 }
 
-function renderCounter() {
-  const pips = state.moments.map((_, j) => {
-    const r = state.results[j];
-    const cls = j === state.idx && !r ? 'current'
-      : r === 'revealed' ? 'failed'
-      : r ? 'done' : '';
-    return `<span class="pip ${cls}"></span>`;
-  }).join('');
-  const m = state.moments[state.idx];
-  $('puzzle-counter').innerHTML =
-    `<span class="pc-move">MOVE ${m.moveNumber}</span>` +
-    `<span class="pc-meta">${state.idx + 1}/${state.moments.length} <span class="pips">${pips}</span></span>`;
-}
+/* ─────────────────── answering & judging ───────────────── */
 
-/* Eval comparison graph: BEST / YOURS / GAME bars on a shared scale around a
-   zero line. Evals are shown from the player's perspective (right = good). */
-
-function userCp(m, score) {
-  const sign = m.userColor === 'w' ? 1 : -1;
-  return Math.max(-990, Math.min(990, score * sign)); // mate scores clamp to the edge
-}
-
-function showEvalGraph(m) {
-  const bestCp = userCp(m, m.evalBest);
-  const gameCp = userCp(m, m.evalAfterPlayed);
-  state.graphLimit = Math.max(Math.abs(bestCp), Math.abs(gameCp), 300) * 1.15;
-
-  const row = (label, key, val) => `
-    <div class="eg-row">
-      <span class="eg-label">${label}</span>
-      <div class="eg-track"><div class="eg-zero"></div>
-        <div class="eg-bar ${key}" data-bar="${key}" style="left:50%;width:0%"></div></div>
-      <span class="eg-val" data-val="${key}">${val}</span>
-    </div>`;
-  const g = $('eval-graph');
-  g.innerHTML =
-    row('GAME', 'game', formatEval(m.evalAfterPlayed, m.mateAfterPlayed, m.userColor)) +
-    row('YOURS', 'you', '—') +
-    row('BEST', 'best', formatEval(m.evalBest, m.mateBest, m.userColor)) +
-    '<div class="eg-axis"><span>← worse</span><span>better →</span></div>';
-  g.hidden = false;
-  requestAnimationFrame(() => {
-    setGraphBar('best', bestCp);
-    setGraphBar('game', gameCp);
-  });
-}
-
-function setGraphBar(key, cp, str, cls) {
-  const g = $('eval-graph');
-  const bar = g.querySelector(`[data-bar="${key}"]`);
-  const val = g.querySelector(`[data-val="${key}"]`);
-  if (!bar) return;
-  const pct = Math.min(Math.abs(cp) / state.graphLimit, 1) * 50;
-  bar.style.width = pct + '%';
-  bar.style.left = cp >= 0 ? '50%' : 50 - pct + '%';
-  if (str !== undefined) val.textContent = str;
-  if (cls) {
-    bar.className = `eg-bar ${key} ${cls}`;
-    val.className = `eg-val ${cls}`;
-  }
-}
-
-function setFeedback(html, cls) {
-  const f = $('feedback');
-  f.innerHTML = html;
-  f.className = 'feedback ' + cls;
-}
-
-function setButtons({ hint = false, idk = false, retry = false, accept = false, next = false } = {}) {
-  $('btn-hint').hidden = !hint;
-  $('btn-idk').hidden = !idk;
-  $('btn-retry').hidden = !retry;
-  $('btn-accept').hidden = !accept;
-  $('btn-next').hidden = !next;
-}
-
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/* ─────────────────── answering & judging ──────────────────── */
-
-async function handleUserMove({ from, to }) {
-  if (state.locked) return;
+async function handleUserMove({ from, to, promotion }) {
+  if (state.locked || !state.quiz) return;
   const m = state.moments[state.idx];
   const legal = state.quiz.moves({ square: from, verbose: true }).filter((mv) => mv.to === to);
-  if (legal.length === 0) return;
-
-  let promotion;
-  if (legal[0].promotion) {
+  if (!legal.length) return;
+  if (legal[0].promotion && !promotion) {
     promotion = await askPromotion(m.userColor);
     if (!promotion) { board.clearSelection(); return; }
   }
@@ -392,293 +238,217 @@ async function handleUserMove({ from, to }) {
   state.locked = true;
   state.attempts++;
   const session = state.session;
-
   const mv = state.quiz.move({ from, to, promotion });
   board.clearHighlights('hint-glow');
-  board.clearArrows();
   mv.captured ? sounds.capture() : sounds.move();
   await board.move(from, to, promotion);
   if (session !== state.session) return;
 
   const uci = from + to + (promotion || '');
   const userPersp = m.userColor === 'w' ? 1 : -1;
+  if (uci === m.bestUci) { judge('best', m, uci, { score: m.evalBest, mateIn: m.mateBest }); return; }
 
-  if (uci === m.bestUci) {
-    judge('best', m, uci, { score: m.evalBest, mateIn: m.mateBest });
-    return;
-  }
-
-  // Ask Stockfish how much this move keeps compared to the best one.
-  $('mini-thinking').hidden = false;
-  let evalAfter;
-  try {
-    evalAfter = await state.engine.evaluate(state.quiz.fen(), { depth: JUDGE_DEPTH });
-  } catch {
-    evalAfter = { score: -9999 * userPersp, mateIn: null };
-  }
+  setFeedback('<span class="dim">he ponders…</span>', 'info');
+  let after;
+  try { after = await state.engine.evaluate(state.quiz.fen(), { depth: JUDGE_DEPTH }); }
+  catch { after = { score: -9999 * userPersp, mateIn: null }; }
   if (session !== state.session) return;
-  $('mini-thinking').hidden = true;
-
-  const diff = (m.evalBest - evalAfter.score) * userPersp;
-  const kind = diff <= BEST_TOLERANCE ? 'best'
-    : diff <= GREAT_TOLERANCE ? 'great'
-    : diff <= GOOD_TOLERANCE ? 'good' : 'bad';
-  judge(kind, m, uci, evalAfter);
+  const diff = (m.evalBest - after.score) * userPersp;
+  const kind = diff <= BEST_TOL ? 'best' : diff <= GREAT_TOL ? 'great' : diff <= GOOD_TOL ? 'good' : 'bad';
+  judge(kind, m, uci, after);
 }
 
-function judge(kind, m, uci, evalAfter) {
-  const { x, y } = board.squareCenter(uci.slice(2, 4));
-  const you = formatEval(evalAfter.score, evalAfter.mateIn, m.userColor);
+function judge(kind, m, uci, after) {
+  const to = uci.slice(2, 4);
+  const { x, y } = board.squareCenter(to);
+  const you = formatEval(after.score, after.mateIn, m.userColor);
   const sameAsGame = uci === m.playedUci;
-  const youCls = kind === 'best' ? 'ok' : kind === 'great' ? 'great' : kind === 'good' ? 'warn' : 'bad';
-  setGraphBar('you', userCp(m, evalAfter.score), you, youCls);
-  const san = escapeHtml(uciToSan(m.fen, uci));
-  // re-attempts of an already-solved puzzle are practice — show feedback but
-  // never re-score, and always leave a way forward (Next) plus retry.
+  const san = escapeText(uciToSan(m.fen, uci));
   const replay = state.replaying;
+  state.gaze = board.squareWorld(to, 0.4);
+  showEval(m, you, kind);
 
   if (kind === 'best') {
-    burst(x, y, 'ok', { power: 1.3 });
-    floatLabel(x, y, 'BEST MOVE', 'ok');
-    sounds.correct();
+    sparkle(x, y, 'ok', { power: 1.3 }); floatLabel(x, y, 'BEST', 'ok'); sounds.correct(); host.react('best');
     if (!replay) {
       state.results[state.idx] = state.attempts === 1 ? 'first' : 'solved';
       state.attempts === 1 ? state.stats.first++ : state.stats.solved++;
       renderCounter();
     }
-    setFeedback(
-      replay
-        ? `<b>${san}</b>: BEST <span class="dim">nailed it again</span>`
-        : `<b>${san}</b>: BEST <span class="dim">${state.attempts === 1 ? 'first try' : 'in ' + state.attempts + ' tries'}</span>`,
-      'ok'
-    );
+    speak(state.attempts === 1 && !replay ? 'The very move. <span class="q">Clever</span> little thing.' : 'There it is.');
+    setFeedback(`<b>${san}</b>: BEST <span class="dim">${replay ? 'again' : state.attempts === 1 ? 'first try' : 'in ' + state.attempts + ' tries'}</span>`, 'ok');
     setButtons({ next: true });
     return;
   }
-
   if (kind === 'great') {
-    burst(x, y, 'great');
-    floatLabel(x, y, 'GREAT', 'great');
-    sounds.great();
+    sparkle(x, y, 'great'); floatLabel(x, y, 'GREAT', 'great'); sounds.great(); host.react('great');
+    speak('Strong… but not the <span class="q">strongest</span>. Look again, or keep it.');
     setFeedback(`<b>${san}</b>: GREAT <span class="dim">not the best</span>`, 'great');
     setButtons(replay ? { retry: true, next: true } : { retry: true, accept: true, idk: true });
     return;
   }
-
   if (kind === 'good') {
-    burst(x, y, 'warn', { particles: 16, power: 0.75 });
-    floatLabel(x, y, 'INACCURATE', 'warn');
-    sounds.wrong();
+    sparkle(x, y, 'warn', { count: 14, power: 0.7 }); floatLabel(x, y, 'INACCURATE', 'warn'); sounds.wrong(); host.react('good');
+    speak('It slips through thy fingers. <span class="q">Again</span>.');
     setFeedback(`<b>${san}</b>: INACCURATE`, 'warn');
   } else {
-    burst(x, y, 'bad');
-    floatLabel(x, y, sameAsGame ? 'SAME AS GAME' : 'WORSE', 'bad');
-    shake($('board-frame'));
-    sounds.wrong();
-    setFeedback(
-      sameAsGame ? `<b>${san}</b>: YOUR GAME MOVE` : `<b>${san}</b>: WORSE`,
-      'bad'
-    );
+    sparkle(x, y, 'bad'); floatLabel(x, y, sameAsGame ? 'AS BEFORE' : 'WORSE', 'bad'); sounds.wrong(); host.react('bad');
+    speak(sameAsGame ? 'The same <span class="q">mistake</span>. We are here because of it.' : 'No. Thou makest it <span class="q">worse</span>.');
+    setFeedback(sameAsGame ? `<b>${san}</b>: YOUR GAME MOVE` : `<b>${san}</b>: WORSE`, 'bad');
   }
-  if (replay) {
-    // already scored — let the player retry or move on, no forced reset
-    setButtons({ retry: true, next: true });
-    return;
-  }
+  if (replay) { setButtons({ retry: true, next: true }); return; }
   state.stats.retries++;
-  // brief pause so the player sees the consequence, then reset for the retry
   const session = state.session;
-  setTimeout(() => { if (session === state.session) resetPuzzlePosition(); }, 1300);
+  setTimeout(() => { if (session === state.session) resetPuzzlePosition(); }, FAST.on ? 0 : 1300);
 }
 
 function resetPuzzlePosition() {
-  state.session++; // cancels pending reset timers and discards in-flight engine verdicts
-  $('mini-thinking').hidden = true;
+  state.session++;
   const m = state.moments[state.idx];
   state.quiz = new Chess(m.fen);
   board.setPosition(m.fen);
   restoreHighlights(m);
-  showEvalGraph(m); // reset the YOURS bar for a fresh attempt
+  showBestEval(m);
+  state.gaze = null;
   setButtons({ hint: !state.hintUsed, idk: true });
   state.locked = false;
 }
 
-function nextPuzzle() {
-  if (state.idx + 1 < state.moments.length) {
-    loadPuzzle(state.idx + 1, `CRITICAL MOMENT ${state.idx + 2} / ${state.moments.length}`);
-  } else {
-    showSummary();
-  }
-}
-
-/* ───────────────────── quiz buttons ───────────────────────── */
-
-$('btn-hint').addEventListener('click', () => {
-  const m = state.moments[state.idx];
-  state.hintUsed = true;
-  state.stats.hints++;
-  sounds.tick();
-  board.highlight(m.bestUci.slice(0, 2), 'hint-glow');
-  setFeedback('↑ move this piece', 'info');
-  $('btn-hint').hidden = true;
-});
-
-$('btn-idk').addEventListener('click', async () => {
-  if (!state.quiz) return;
-  const m = state.moments[state.idx];
-  state.locked = true;
-  const session = state.session;
-
-  // make sure we reveal from the clean puzzle position
-  state.quiz = new Chess(m.fen);
-  board.setPosition(m.fen);
-  restoreHighlights(m);
-  board.clearArrows(); // don't overlap the red arrow with the revealed best move
-  setButtons({});
-  await delay(350);
-  if (session !== state.session) return;
-
-  const from = m.bestUci.slice(0, 2);
-  const to = m.bestUci.slice(2, 4);
-  sounds.reveal();
-  await board.move(from, to, m.bestUci[4]);
-  if (session !== state.session) return;
-  const { x, y } = board.squareCenter(to);
-  burst(x, y, 'info');
-  floatLabel(x, y, m.bestSan, 'info');
-
-  state.results[state.idx] = 'revealed';
-  state.stats.revealed++;
-  renderCounter();
-  setFeedback(
-    `BEST <b>${escapeHtml(m.bestSan)}</b> ${formatEval(m.evalBest, m.mateBest, m.userColor)} ` +
-    `<span class="dim">· you played ${escapeHtml(m.playedSan)}</span>`,
-    'info'
-  );
-  setButtons({ next: true });
-});
-
-$('btn-retry').addEventListener('click', () => { sounds.tick(); setFeedback('', ''); retryCurrent(); });
-
-// ← always resets the position for another try (even after you've solved it);
-// → advances when Next is available.
-document.addEventListener('keydown', (e) => {
-  if (!$('screen-quiz').classList.contains('active') || !state.quiz) return;
-  if (e.key === 'ArrowLeft') {
-    sounds.tick();
-    setFeedback('', '');
-    retryCurrent();
-  } else if (e.key === 'ArrowRight') {
-    if (!$('btn-next').hidden) $('btn-next').click();
-  }
-});
-
-// Reset to the puzzle start for another attempt. If the puzzle was already
-// resolved, flag replay mode so the re-attempt doesn't change the score.
 function retryCurrent() {
   if (state.results[state.idx] != null) state.replaying = true;
   resetPuzzlePosition();
 }
 
-$('btn-accept').addEventListener('click', () => {
-  state.results[state.idx] = 'accepted';
-  state.stats.accepted++;
-  renderCounter();
-  sounds.great();
-  nextPuzzle();
-});
-
-$('btn-next').addEventListener('click', () => { state.session++; nextPuzzle(); });
-
-/* ─────────────────────── promotion ────────────────────────── */
-
-function askPromotion(color) {
-  return new Promise((resolve) => {
-    const modal = $('promo-modal');
-    const box = $('promo-choices');
-    box.innerHTML = '';
-    const glyphs = { q: '♛', r: '♜', n: '♞', b: '♝' };
-    for (const [type, glyph] of Object.entries(glyphs)) {
-      const b = document.createElement('button');
-      b.textContent = glyph;
-      b.style.color = color === 'w' ? '#f8f4ff' : '#2a2440';
-      b.addEventListener('click', () => { modal.hidden = true; resolve(type); });
-      box.appendChild(b);
-    }
-    modal.hidden = false;
-    modal.onclick = (e) => { if (e.target === modal) { modal.hidden = true; resolve(null); } };
-  });
+function nextPuzzle() {
+  if (state.idx + 1 < state.moments.length) loadPuzzle(state.idx + 1);
+  else showSummary();
 }
 
-/* ─────────────────────── summary ──────────────────────────── */
+/* ─────────────────────── reveal / hint ─────────────────── */
+
+async function doReveal() {
+  if (!state.quiz) return;
+  const m = state.moments[state.idx];
+  state.locked = true;
+  const session = state.session;
+  state.quiz = new Chess(m.fen);
+  board.setPosition(m.fen);
+  restoreHighlights(m);
+  setButtons({});
+  await wait(350);
+  if (session !== state.session) return;
+  const from = m.bestUci.slice(0, 2), to = m.bestUci.slice(2, 4);
+  sounds.reveal();
+  state.gaze = board.squareWorld(to, 0.4);
+  await board.move(from, to, m.bestUci[4]);
+  if (session !== state.session) return;
+  const { x, y } = board.squareCenter(to);
+  sparkle(x, y, 'info'); floatLabel(x, y, m.bestSan, 'info');
+  if (state.results[state.idx] == null) { state.results[state.idx] = 'revealed'; state.stats.revealed++; renderCounter(); }
+  speak(`I would play <span class="q">${escapeText(m.bestSan)}</span>. Remember it.`);
+  setFeedback(`BEST <b>${escapeText(m.bestSan)}</b> ${formatEval(m.evalBest, m.mateBest, m.userColor)} <span class="dim">· you played ${escapeText(m.playedSan)}</span>`, 'info');
+  setButtons({ next: true });
+}
+
+/* ─────────────────────── summary ───────────────────────── */
 
 async function showSummary() {
-  const s = state.stats;
-  const n = state.moments.length;
+  setPhase('SUMMARY');
+  $('quiz-hud').hidden = true;
+  const s = state.stats, n = state.moments.length;
   const score = (s.first * 2 + s.solved * 1.25 + s.accepted) / (n * 2);
-
-  const rank = score >= 0.9 ? '⚡ SILICON GRANDMASTER ⚡'
-    : score >= 0.65 ? '🔪 TACTICAL SURGEON'
-    : score >= 0.4 ? '📈 RISING TACTICIAN'
-    : score >= 0.15 ? '🧩 PATTERN BUILDER'
-    : '🥚 BLUNDER APPRENTICE — keep revising';
-
-  $('summary-rank').textContent = rank;
-  $('stats-row').innerHTML = `
-    <div class="stat-box"><div class="stat-num green">${s.first}</div><div class="stat-label">first try</div></div>
-    <div class="stat-box"><div class="stat-num gold">${s.solved + s.accepted}</div><div class="stat-label">eventually</div></div>
-    <div class="stat-box"><div class="stat-num cyan">${s.revealed}</div><div class="stat-label">revealed</div></div>
-  `;
-  $('summary-detail').textContent =
-    `${n} critical moments vs ${state.game.opponent} · ${s.retries} retries · ${s.hints} hints. ` +
-    (score >= 0.65
-      ? 'Those mistakes won\'t fool you twice.'
-      : 'Run it again — repetition turns blunders into instincts.');
-
-  await sweep('SESSION COMPLETE');
-  showScreen('screen-summary');
-  sounds.fanfare();
-  confetti();
+  const rank = score >= 0.9 ? 'SILICON GRANDMASTER'
+    : score >= 0.65 ? 'TACTICAL SURGEON'
+    : score >= 0.4 ? 'RISING TACTICIAN'
+    : score >= 0.15 ? 'PATTERN BUILDER'
+    : 'BLUNDER APPRENTICE';
+  const lines = [
+    `${s.first} found at once · ${s.solved + s.accepted} in time`,
+    `${s.revealed} I had to show thee`,
+    `${n} moments vs ${state.game.opponent}`,
+  ];
+  paper.drawSummary(rank, lines);
+  speak(score >= 0.65 ? 'Thy mistakes shall not fool thee <span class="q">twice</span>.' : 'Come again. Repetition turns blunders into <span class="q">instinct</span>.');
+  flareCandles(); sounds.fanfare();
+  host.leanIn(); await paper.slideIn(); await host.leanBack();
 }
 
-$('btn-another').addEventListener('click', async () => {
-  await sweep('BACK TO YOUR GAMES');
-  showScreen('screen-games');
-});
-$('btn-new-player').addEventListener('click', () => showScreen('screen-landing'));
+/* ─────────────────────── HUD helpers ───────────────────── */
 
-/* ─────────────────────── misc wiring ──────────────────────── */
-
-// 3D / 2D board toggle (persisted). 3D is the default unless the user opts out
-// or the OS asks for reduced motion.
-const threeDBtn = $('btn-3d');
-const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-let is3d = localStorage.getItem('revisemychess-3d');
-is3d = is3d === null ? !prefersReduced : is3d === '1';
-function apply3d() {
-  document.body.classList.toggle('is3d', is3d);
-  threeDBtn.classList.toggle('muted', !is3d);
-  threeDBtn.textContent = is3d ? '♟ 3D' : '▦ 2D';
-  threeDBtn.title = is3d ? 'Switch to flat board' : 'Switch to 3D board';
+function renderCounter() {
+  const pips = state.moments.map((_, j) => {
+    const r = state.results[j];
+    const cls = j === state.idx && !r ? 'current' : r === 'revealed' ? 'failed' : r ? 'done' : '';
+    return `<span class="pip ${cls}"></span>`;
+  }).join('');
+  $('hud-counter').innerHTML = `MOVE ${state.moments[state.idx].moveNumber} <span class="pips">${pips}</span>`;
 }
-apply3d();
-threeDBtn.addEventListener('click', () => {
-  is3d = !is3d;
-  localStorage.setItem('revisemychess-3d', is3d ? '1' : '0');
-  apply3d();
+
+function showBestEval(m) {
+  $('hud-eval').innerHTML = `the best move holds <span class="best">${formatEval(m.evalBest, m.mateBest, m.userColor)}</span>`;
+}
+function showEval(m, you, kind) {
+  const cls = kind === 'best' ? 'best' : 'you';
+  $('hud-eval').innerHTML = `best <span class="best">${formatEval(m.evalBest, m.mateBest, m.userColor)}</span> · yours <span class="${cls}">${you}</span>`;
+}
+
+function setFeedback(html, cls) { const f = $('hud-feedback'); f.innerHTML = html; f.className = 'hud-feedback ' + (cls || ''); }
+
+function setButtons({ hint = false, idk = false, retry = false, accept = false, next = false } = {}) {
+  $('btn-hint').hidden = !hint; $('btn-idk').hidden = !idk; $('btn-retry').hidden = !retry;
+  $('btn-accept').hidden = !accept; $('btn-next').hidden = !next;
+}
+
+function escapeText(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+/* ─────────────────────── HUD buttons ───────────────────── */
+
+$('btn-hint').addEventListener('click', () => {
+  const m = state.moments[state.idx];
+  state.hintUsed = true; state.stats.hints++; sounds.tick();
+  board.highlight(m.bestUci.slice(0, 2), 'hint-glow');
+  speak('That one. It <span class="q">wants</span> to move.');
+  $('btn-hint').hidden = true;
 });
+$('btn-idk').addEventListener('click', doReveal);
+$('btn-retry').addEventListener('click', () => { sounds.tick(); setFeedback('', ''); retryCurrent(); });
+$('btn-accept').addEventListener('click', () => {
+  state.results[state.idx] = 'accepted'; state.stats.accepted++; renderCounter(); sounds.great(); nextPuzzle();
+});
+$('btn-next').addEventListener('click', () => { state.session++; nextPuzzle(); });
+
+document.addEventListener('keydown', (e) => {
+  if (state.phase !== 'QUIZ' || !state.quiz) return;
+  if (e.key === 'ArrowLeft') { sounds.tick(); setFeedback('', ''); retryCurrent(); }
+  else if (e.key === 'ArrowRight') { if (!$('btn-next').hidden) $('btn-next').click(); }
+});
+
+/* ─────────────────────── sound toggle ──────────────────── */
 
 const soundBtn = $('btn-sound');
 soundBtn.classList.toggle('muted', isMuted());
-soundBtn.textContent = isMuted() ? '🔇' : '🔊';
-soundBtn.addEventListener('click', () => {
-  const muted = toggleMute();
-  soundBtn.classList.toggle('muted', muted);
-  soundBtn.textContent = muted ? '🔇' : '🔊';
-});
+soundBtn.addEventListener('click', () => soundBtn.classList.toggle('muted', toggleMute()));
 
-// allow ?user=name deep link
-const params = new URLSearchParams(location.search);
-if (params.get('user')) {
-  $('username-input').value = params.get('user');
-}
+/* ─────────────────── test hook (window.__rmc) ──────────── */
+
+window.__rmc = {
+  get state() { return state.phase; },
+  get puzzleIndex() { return state.idx; },
+  get results() { return state.results; },
+  get stats() { return state.stats; },
+  get fastForward() { return FAST.on; },
+  set fastForward(v) { FAST.on = !!v; },
+  get hintActive() { return board.hasHighlight('hint-glow'); },
+  submitUsername(name) { return doFetch(name); },
+  pickGame(i) { return pickGame(i); },
+  squareToClient(sq) { return board.squareCenter(sq, 0); },
+  playMove(from, to, promo) { return handleUserMove({ from, to, promotion: promo }); },
+  reveal() { return doReveal(); },
+  hint() { $('btn-hint').click(); },
+  retry() { retryCurrent(); },
+  next() { return nextPuzzle(); },
+};
+
+// deep link ?user=name
+const pUser = new URLSearchParams(location.search).get('user');
+if (pUser) $('username-input').value = pUser;

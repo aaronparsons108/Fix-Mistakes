@@ -1,3 +1,4 @@
 node_modules/
 test/shots/*
-!test/shots/1-landing.png
+!test/shots/cabin-1-boot.png
+!test/shots/cabin-3-quiz.png

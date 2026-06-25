@@ -1,84 +1,84 @@
-# ♞ ReviseMyChess — Fix Your Mistakes
+# ♟ Revise My Chess — *the cabin*
 
-A chess trainer that pulls your **chess.com** games, runs every
-position through **Stockfish**, finds the exact moments you threw the game
-away — and makes you replay them until you find the move you *should* have
-played.
+You wake at a table in a dark wooden cabin, lit by guttering candles. Across
+the table sits a giant pawn with two big eyes. He asks for your **chess.com**
+name, slides a sheet of parchment listing your recent losses, and then makes
+you replay the exact moments you threw each game away — on a real **3D board**,
+with **Stockfish** judging every move.
 
-![landing](test/shots/1-landing.png)
+A WebGL homage to *Inscryption*'s Act 1, built on a chess blunder-trainer.
+
+![the cabin](test/shots/cabin-1-boot.png)
 
 ## How it works
 
-1. **Enter your chess.com username.** Your recent losses are fetched from the
-   public chess.com API (no login or API key needed).
-2. **Pick a game to dissect.** Stockfish (WebAssembly, running entirely in
-   your browser — nothing is uploaded anywhere) evaluates every position
-   while a pawn bounces through its promotion forms.
-3. **Replay your critical moments.** For each blunder, the board rewinds to
-   just before your mistake, replays your opponent's last move, shows you the
-   eval the best move would hold, and asks you to find it:
-   - **Best move** → gold/green particle burst; click **Next** (or press →)
-     when you're ready to move on.
-   - **Great move** (within ~0.8 pawns of best) → gold burst and praise, but
-     you can retry to find the even-stronger move (or keep it and move on).
-   - **Reasonable move** (within ~1.6 pawns) → orange burst — it doesn't lose,
-     but it lets the advantage slip. Try again.
-   - **Anything worse** → red burst, board shakes and resets — try again.
-     You always get to retry until you find the best move.
-   - **🤷 I don't know** → Stockfish shows the answer.
-   - **💡 Hint** → highlights the piece that wants to move.
-   - **Keyboard:** ← resets the position for another try, → advances when
-     Next is available.
-4. **Session summary** — first-try solves, retries, reveals, and a rank from
-   *Blunder Apprentice* to *Silicon Grandmaster*. Confetti included.
+1. **It opens at the table** — no menu. The board is already set, candles lit.
+2. **The host asks your chess.com name.** Your recent losses are fetched from
+   the public chess.com API (no login or key). He slides a parchment of games.
+3. **Touch a game.** Stockfish (WebAssembly, in a Web Worker — nothing leaves
+   your machine) reads it and finds where it went wrong.
+4. **Replay your blunders on the 3D board.** For each critical moment the board
+   rewinds, the host's last move replays, and he asks you to find the move you
+   *should* have played:
+   - **Best move** (≤0.25 pawns from optimal) → he's pleased; click **Next** (→).
+   - **Great** (≤0.8) → praised, but you can retry for the stronger move, or keep it.
+   - **Inaccurate** (≤1.6) → it slips; try again.
+   - **Worse** → the board resets; try again. You always get to retry.
+   - **✦ hint** highlights the piece; **I don't know** reveals the answer.
+   - **←** retries the position (even after solving — without re-scoring); **→** advances.
+5. **The verdict** — a parchment of your stats and a rank, from *Blunder
+   Apprentice* to *Silicon Grandmaster*.
+
+![the quiz](test/shots/cabin-3-quiz.png)
 
 ## Running it
 
-It's a fully static site — any web server works (a server is required for the
-Stockfish worker; opening `index.html` directly from disk won't):
+A fully static site (a server is required for the Stockfish worker and ES
+modules — opening the file directly won't work):
 
 ```bash
-python serve.py                # or: npx http-server -p 8080
+python serve.py            # or: npx http-server -p 8080
 # then open http://127.0.0.1:8080
 ```
 
-Prefer `serve.py` over `python -m http.server`: it guarantees correct MIME
-types (Windows' http.server often serves .css/.js as text/plain, which makes
-Chrome render the page unstyled and refuse to run the ES modules) and sends
-no-cache headers so a plain refresh always picks up fresh code.
-
-Deep link: `http://localhost:8080/?user=yourname` pre-fills your username.
+`serve.py` sends correct MIME types (Windows' `http.server` mislabels `.js`/
+`.wasm`, which breaks the modules) and no-cache headers so a refresh always
+picks up fresh code. Deep link: `?user=yourname` pre-fills the name.
 
 ## Tech
 
-- **No build step, no framework, no backend.** Vanilla ES modules.
-- `lib/stockfish.js` + `lib/stockfish.wasm` — Stockfish 10 (WASM) run in a
-  Web Worker, with `lib/stockfish.asm.js` as a pure-JS fallback (GPLv3,
-  see `lib/stockfish.LICENSE`).
-- `lib/chess.js` — move generation / PGN parsing (BSD-2-Clause,
-  see `lib/chess.js.LICENSE`).
-- Interactive board (click-to-move + drag & drop, promotion picker,
-  legal-move dots, check highlights) built from scratch in `js/board.js`.
-  Renders as a **3D board on a table** by default (CSS 3D perspective —
-  the board tilts into the scene and the pieces stand up to face you);
-  toggle to a flat 2D board with the ♟ 3D button. Pointer hit-testing
-  uses the real DOM stack (`elementsFromPoint`) so clicks and drags stay
-  pixel-accurate even when the board is tilted.
-- Particle bursts, screen sweeps and confetti via the Web Animations API
-  (`js/effects.js`); sound effects synthesized with WebAudio (`js/sound.js`)
-  — zero media assets.
+- **No build step, no framework, no backend.** Vanilla ES modules + WebGL.
+- `lib/three/` — Three.js r184 (core ESM), used to build the whole scene from
+  primitives: candlelit cabin, table, procedural chess pieces (lathe profiles),
+  the pawn host, and a canvas-textured parchment. No 3D model files.
+- `lib/stockfish.*` — Stockfish 10 (WASM, asm.js fallback) in a Web Worker.
+- `lib/chess.js` — move generation / PGN parsing.
+- `assets/fonts/` — self-hosted *IM Fell English* (old serif) + *Special Elite*
+  (typewriter) for the cabin's UI.
 
-### Blunder detection
+### Module map
 
-Every position (after the opening) is evaluated at depth 12. A move of yours
-is a *critical moment* when it drops ≥ 1.3 pawns of evaluation (≥ 2.5 =
-blunder), unless the position was already hopeless. The top 8 moments,
-in game order, become your quiz. Your quiz answers are judged live at
-depth 13 against the engine's best line.
+```
+js/app.js     flow state machine (BOOT→ASK_USERNAME→FETCHING→PICK_GAME→
+              ANALYZING→QUIZ→SUMMARY); judging/scoring; window.__rmc test hook
+js/scene.js   renderer, camera, room, table, candle lights + flicker, vignette
+js/board3d.js the 3D board: square↔world map, raycast input, move/highlight anim
+js/pieces.js  procedural pieces (LatheGeometry profiles + primitive decor)
+js/host.js    the pawn host: bob, blink, gaze, lean, reactions
+js/paper.js   the parchment: game list / verdict, slide-in, raycast row-pick
+js/ui.js      thin HTML overlays: speech, float labels, sparkles, promotion
+js/tween.js   promise-based rAF tweens (FAST flag for deterministic tests)
+js/chesscom.js / engine.js / analysis.js / sound.js   unchanged engine code
+```
+
+The pieces and board live entirely in WebGL (no DOM squares), so the automated
+test drives the app through a small `window.__rmc` hook (submitUsername,
+pickGame, playMove, squareToClient, reveal, next…), with one real raycast
+click to verify pointer→square mapping under the 3D camera.
 
 ## Tests
 
 ```bash
 node test/smoke.mjs   # analysis pipeline against real Stockfish (Node)
-node test/e2e.mjs     # full browser flow via Playwright (mocked chess.com API)
+node test/e2e.mjs     # full cabin flow in headless WebGL via Playwright
 ```
