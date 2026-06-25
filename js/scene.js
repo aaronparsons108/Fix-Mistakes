@@ -9,8 +9,8 @@ scene.background = new THREE.Color(0x070504);
 scene.fog = new THREE.FogExp2(0x0a0705, 0.045);
 
 export const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-camera.position.set(0, 8.0, 6.0);   // high enough to read the whole board, the host still looms across it
-camera.lookAt(0, 0.4, -1.8);
+camera.position.set(0, 9.4, 9.2);   // pulled back + up so the whole board fits, host still looms across it
+camera.lookAt(0, 0.0, -1.0);
 
 export let renderer = null;
 const clock = new THREE.Clock();
@@ -150,8 +150,8 @@ let vignette;
 function buildVignette() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const x = c.getContext('2d');
-  const g = x.createRadialGradient(128, 128, 60, 128, 128, 150);
-  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.62, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.92)');
+  const g = x.createRadialGradient(128, 128, 70, 128, 128, 160);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.72, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.72)');
   x.fillStyle = g; x.fillRect(0, 0, 256, 256);
   const tex = new THREE.CanvasTexture(c);
   vignette = new THREE.Mesh(
