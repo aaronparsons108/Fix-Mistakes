@@ -501,7 +501,7 @@ body {
   background: var(--panel-2); border: 1px solid var(--panel-edge);
 }
 .eval-graph::before {
-  content: 'EVALUATION · pawns, your view';
+  content: 'EVALUATION';
   font-family: var(--font-display); font-size: 10px; font-weight: 700;
   letter-spacing: 2px; color: var(--text-dim);
 }

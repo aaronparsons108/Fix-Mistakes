@@ -116,6 +116,23 @@ try {
   check(/BEST/.test(fb1) && /Nxd4/.test(fb1), `best move recognized ("${fb1.slice(0, 60)}…")`);
   await page.screenshot({ path: SHOTS + '6-correct.png' });
 
+  // ← lets you retry even after solving; the score (pips) must not change
+  const pipsBefore = await page.locator('.pip.done, .pip.current').evaluateAll((els) =>
+    els.map((e) => e.className).join('|'));
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForTimeout(400);
+  const replayable = await page.evaluate(() =>
+    document.querySelector('[data-val="you"]').textContent === '—' && // graph reset for a fresh try
+    document.querySelectorAll('.board-arrow.played').length === 1);    // puzzle restored
+  check(replayable, 'left arrow retries even after a correct answer');
+  await clickSquare(page, board, 'f3');
+  await page.waitForTimeout(200);
+  await clickSquare(page, board, 'd4');
+  await page.waitForSelector('.feedback.ok', { timeout: 30000 });
+  const pipsAfter = await page.locator('.pip.done, .pip.current').evaluateAll((els) =>
+    els.map((e) => e.className).join('|'));
+  check(pipsBefore === pipsAfter, 'replaying a solved puzzle does not re-score it');
+
   // advance to puzzle 2 of N via the Next button (no auto-advance)
   const total = parseInt((await page.textContent('#puzzle-counter')).match(/\/\s*(\d+)/)[1], 10);
   console.log(`     (analysis found ${total} critical moments)`);

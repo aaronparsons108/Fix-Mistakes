@@ -41,6 +41,7 @@ const state = {
   locked: true,
   attempts: 0,
   hintUsed: false,
+  replaying: false,     // re-attempting an already-resolved puzzle (don't re-score)
   session: 0,           // token to cancel stale timers when user skips ahead
   stats: null,
   results: [],          // per-puzzle: 'first' | 'solved' | 'accepted' | 'revealed'
@@ -240,6 +241,7 @@ async function loadPuzzle(i, sweepText) {
   state.locked = true;
   state.attempts = 0;
   state.hintUsed = false;
+  state.replaying = false;
 
   await sweep(sweepText);
   showScreen('screen-quiz');
@@ -431,16 +433,23 @@ function judge(kind, m, uci, evalAfter) {
   const youCls = kind === 'best' ? 'ok' : kind === 'great' ? 'great' : kind === 'good' ? 'warn' : 'bad';
   setGraphBar('you', userCp(m, evalAfter.score), you, youCls);
   const san = escapeHtml(uciToSan(m.fen, uci));
+  // re-attempts of an already-solved puzzle are practice — show feedback but
+  // never re-score, and always leave a way forward (Next) plus retry.
+  const replay = state.replaying;
 
   if (kind === 'best') {
     burst(x, y, 'ok', { power: 1.3 });
     floatLabel(x, y, 'BEST MOVE', 'ok');
     sounds.correct();
-    state.results[state.idx] = state.attempts === 1 ? 'first' : 'solved';
-    state.attempts === 1 ? state.stats.first++ : state.stats.solved++;
-    renderCounter();
+    if (!replay) {
+      state.results[state.idx] = state.attempts === 1 ? 'first' : 'solved';
+      state.attempts === 1 ? state.stats.first++ : state.stats.solved++;
+      renderCounter();
+    }
     setFeedback(
-      `<b>${san}</b>: BEST <span class="dim">${state.attempts === 1 ? 'first try' : 'in ' + state.attempts + ' tries'}</span>`,
+      replay
+        ? `<b>${san}</b>: BEST <span class="dim">nailed it again</span>`
+        : `<b>${san}</b>: BEST <span class="dim">${state.attempts === 1 ? 'first try' : 'in ' + state.attempts + ' tries'}</span>`,
       'ok'
     );
     setButtons({ next: true });
@@ -452,7 +461,7 @@ function judge(kind, m, uci, evalAfter) {
     floatLabel(x, y, 'GREAT', 'great');
     sounds.great();
     setFeedback(`<b>${san}</b>: GREAT <span class="dim">not the best</span>`, 'great');
-    setButtons({ retry: true, accept: true, idk: true });
+    setButtons(replay ? { retry: true, next: true } : { retry: true, accept: true, idk: true });
     return;
   }
 
@@ -471,6 +480,11 @@ function judge(kind, m, uci, evalAfter) {
       'bad'
     );
   }
+  if (replay) {
+    // already scored — let the player retry or move on, no forced reset
+    setButtons({ retry: true, next: true });
+    return;
+  }
   state.stats.retries++;
   // brief pause so the player sees the consequence, then reset for the retry
   const session = state.session;
@@ -484,6 +498,7 @@ function resetPuzzlePosition() {
   state.quiz = new Chess(m.fen);
   board.setPosition(m.fen);
   restoreHighlights(m);
+  showEvalGraph(m); // reset the YOURS bar for a fresh attempt
   setButtons({ hint: !state.hintUsed, idk: true });
   state.locked = false;
 }
@@ -543,20 +558,27 @@ $('btn-idk').addEventListener('click', async () => {
   setButtons({ next: true });
 });
 
-$('btn-retry').addEventListener('click', () => { sounds.tick(); resetPuzzlePosition(); });
+$('btn-retry').addEventListener('click', () => { sounds.tick(); setFeedback('', ''); retryCurrent(); });
 
-// ← resets the position for another try; → advances when Next is available
+// ← always resets the position for another try (even after you've solved it);
+// → advances when Next is available.
 document.addEventListener('keydown', (e) => {
   if (!$('screen-quiz').classList.contains('active') || !state.quiz) return;
   if (e.key === 'ArrowLeft') {
-    if (state.results[state.idx] == null) {
-      sounds.tick();
-      resetPuzzlePosition();
-    }
+    sounds.tick();
+    setFeedback('', '');
+    retryCurrent();
   } else if (e.key === 'ArrowRight') {
     if (!$('btn-next').hidden) $('btn-next').click();
   }
 });
+
+// Reset to the puzzle start for another attempt. If the puzzle was already
+// resolved, flag replay mode so the re-attempt doesn't change the score.
+function retryCurrent() {
+  if (state.results[state.idx] != null) state.replaying = true;
+  resetPuzzlePosition();
+}
 
 $('btn-accept').addEventListener('click', () => {
   state.results[state.idx] = 'accepted';
