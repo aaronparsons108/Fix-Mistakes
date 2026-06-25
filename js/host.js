@@ -11,7 +11,8 @@ const PAWN = [V(0.30, 0), V(0.31, 0.05), V(0.20, 0.11), V(0.13, 0.24), V(0.19, 0
 export class Host {
   constructor(scene) {
     this.group = new THREE.Group();
-    this.group.position.set(0, 0, -5.4);
+    this.group.position.set(0, 0, -5.1);
+    this.group.scale.setScalar(1.3);   // loom larger over the far edge of the board
     this.baseY = 0;
     this.mood = 0;          // -1 droop … +1 perky
     this.lean = 0;
@@ -51,11 +52,14 @@ export class Host {
     );
     iris.position.z = 0.21;
     irisGrp.add(iris);
+    // eyelid: a full dome that sweeps down over the eye only during a blink;
+    // hidden when open so it never shows as a line across the eyeball
     const lid = new THREE.Mesh(
-      new THREE.SphereGeometry(0.315, 22, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.SphereGeometry(0.33, 22, 16),
       new THREE.MeshStandardMaterial({ color: 0x241c16, roughness: 0.55 })
     );
     lid.scale.y = 0.02;
+    lid.visible = false;
     g.add(white, irisGrp, lid);
     return { g, iris: irisGrp, lid, side };
   }
@@ -114,14 +118,16 @@ export class Host {
     this.group.rotation.z = Math.sin(t * 0.7) * 0.02;
     this.group.rotation.x = this.lean + (this.mood < 0 ? 0.08 : 0);
 
-    // blink
+    // blink: the dome lid grows over the full eye, then retracts; hidden when open
     if (t > this.nextBlink && this.blink === 0) { this.blink = 0.0001; this._blinkDir = 1; }
     if (this.blink > 0) {
       this.blink += (this._blinkDir || 1) * dt * 9;
       if (this.blink >= 1) { this.blink = 1; this._blinkDir = -1; }
       if (this.blink <= 0 && this._blinkDir < 0) { this.blink = 0; this.nextBlink = t + 2 + Math.random() * 4; }
-      const s = 0.02 + 0.98 * Math.max(0, this.blink);
-      this.eyeL.lid.scale.y = s; this.eyeR.lid.scale.y = s;
+      const s = 0.02 + 1.04 * Math.max(0, this.blink);
+      for (const e of [this.eyeL, this.eyeR]) { e.lid.visible = this.blink > 0.03; e.lid.scale.y = s; }
+    } else {
+      this.eyeL.lid.visible = false; this.eyeR.lid.visible = false;
     }
   }
 }

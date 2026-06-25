@@ -1,6 +1,6 @@
-// The candlelit cabin: renderer, camera, room, table, candle lights (with
-// flicker), vignette, embers, and the render loop. Inscryption / Leshy's-house
-// mood — deep brown-black room, two trembling amber pools on the table.
+// The cabin: renderer, camera, room, table, a single hanging lamp over the
+// board, vignette, and the render loop. Inscryption / Leshy's-house mood — a
+// dark room with one warm pool of light on the table.
 
 import * as THREE from '../lib/three/three.module.js';
 
@@ -9,8 +9,8 @@ scene.background = new THREE.Color(0x070504);
 scene.fog = new THREE.FogExp2(0x0a0705, 0.045);
 
 export const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-camera.position.set(0, 4.2, 7.2);
-camera.lookAt(0, 0.2, -1.0);
+camera.position.set(0, 8.0, 6.0);   // high enough to read the whole board, the host still looms across it
+camera.lookAt(0, 0.4, -1.8);
 
 export let renderer = null;
 const clock = new THREE.Clock();
@@ -18,14 +18,15 @@ const tickers = []; // per-frame callbacks: (t, dt) => void
 
 export function onFrame(fn) { tickers.push(fn); }
 
-let candleA, candleB;
+let lamp, hostFill, bulbMesh;
+let baseExposure = 1.12;
 
 export function initScene(canvas, { headless = false } = {}) {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, headless ? 1 : 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.92;
+  renderer.toneMappingExposure = baseExposure;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -93,54 +94,54 @@ function plankTexture() {
 
 /* ── candlelight ──────────────────────────────────────── */
 function buildLights() {
-  candleA = new THREE.PointLight(0xff8a3c, 22, 16, 2.0);
-  candleA.position.set(-3.4, 2.0, 2.2);
-  candleA.castShadow = true;
-  candleA.shadow.mapSize.set(1024, 1024);
-  candleA.shadow.camera.near = 0.2; candleA.shadow.camera.far = 18; candleA.shadow.bias = -0.0025;
-  scene.add(candleA);
+  // a single lamp hanging over the table, pooling warm light onto the board
+  lamp = new THREE.SpotLight(0xffe8c4, 150, 28, Math.PI / 4.2, 0.5, 1.5);
+  lamp.position.set(0, 7.6, -0.6);
+  lamp.target.position.set(0, 0, -1.0);
+  lamp.castShadow = true;
+  lamp.shadow.mapSize.set(2048, 2048);
+  lamp.shadow.camera.near = 1; lamp.shadow.camera.far = 18; lamp.shadow.bias = -0.0015;
+  scene.add(lamp); scene.add(lamp.target);
 
-  candleB = new THREE.PointLight(0xffb060, 11, 14, 2.0);
-  candleB.position.set(3.2, 1.9, -3.2);
-  scene.add(candleB);
+  // warm fill so the room and the host aren't lost to black
+  scene.add(new THREE.HemisphereLight(0x6f5a3e, 0x140d08, 0.6));
+  hostFill = new THREE.PointLight(0xffd49a, 32, 16, 2.0);
+  hostFill.position.set(0, 4.2, -4.0);   // close to the host, to catch his face + eyes
+  scene.add(hostFill);
 
-  scene.add(new THREE.HemisphereLight(0x2a3346, 0x0a0705, 0.22));
-
-  makeCandle(-3.4, 2.2);
-  makeCandle(3.2, -3.2);
+  buildLamp();
 }
 
-const flames = [];
-function makeCandle(x, z) {
-  const wax = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.12, 0.14, 0.7, 12),
-    new THREE.MeshStandardMaterial({ color: 0xe8d8b0, roughness: 0.6, emissive: 0x3a2408, emissiveIntensity: 0.4 })
+function buildLamp() {
+  const metal = new THREE.MeshStandardMaterial({ color: 0x18110a, roughness: 0.5, metalness: 0.45 });
+  const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 6, 8), metal);
+  cord.position.set(0, 11.2, -0.6); scene.add(cord);
+  const shade = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 1.7, 1.4, 32, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0x241710, roughness: 0.5, metalness: 0.35, side: THREE.DoubleSide, emissive: 0x4a2c12, emissiveIntensity: 0.6 })
   );
-  wax.position.set(x, 0.35, z); wax.castShadow = true; scene.add(wax);
-  const flame = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.26, 0.46),
-    new THREE.MeshBasicMaterial({ color: 0xffcc66, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+  shade.position.set(0, 8.3, -0.6); scene.add(shade);
+  bulbMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.26, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffe7b0, toneMapped: false })
   );
-  flame.position.set(x, 0.95, z); scene.add(flame);
-  flames.push(flame);
+  bulbMesh.position.set(0, 7.7, -0.6); scene.add(bulbMesh);
 }
 
-const flick = (a) => 1 + 0.12 * Math.sin(a * 11.3) + 0.07 * Math.sin(a * 23.7);
+// gentle sway of the hanging lamp + a faint living glow
 function flicker(t) {
-  if (!candleA) return;
-  const fa = flick(t), fb = flick(t * 1.3 + 2.1);
-  candleA.intensity = 22 * fa;
-  candleB.intensity = 11 * fb;
-  candleA.position.x = -3.4 + 0.05 * Math.sin(t * 17);
-  candleA.position.z = 2.2 + 0.05 * Math.cos(t * 19);
-  for (const f of flames) { f.lookAt(camera.position); f.scale.set(0.9 + 0.2 * Math.sin(t * 20), fa, 1); }
+  if (!lamp) return;
+  const sx = Math.sin(t * 0.55) * 0.13, sz = Math.cos(t * 0.43) * 0.09;
+  lamp.position.x = sx; lamp.position.z = -0.6 + sz;
+  if (bulbMesh) { bulbMesh.position.x = sx; bulbMesh.position.z = -0.6 + sz; }
+  lamp.intensity = 150 * (1 + 0.025 * Math.sin(t * 5.0));
 }
 
-// Briefly brighten the candles (used at dramatic beats).
+// Briefly brighten the room (used at dramatic beats).
 export function flareCandles() {
-  if (!candleA) return;
+  if (!renderer) return;
   import('./tween.js').then(({ tween }) => {
-    tween({ ms: 700, ease: 'easeOutCubic', onUpdate: (v) => { renderer.toneMappingExposure = 0.92 + 0.5 * Math.sin(v * Math.PI); } });
+    tween({ ms: 700, ease: 'easeOutCubic', onUpdate: (v) => { renderer.toneMappingExposure = baseExposure + 0.4 * Math.sin(v * Math.PI); } });
   });
 }
 

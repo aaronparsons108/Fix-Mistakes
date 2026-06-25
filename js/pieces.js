@@ -67,7 +67,8 @@ export function makePiece(type, color) {
   const g = new THREE.Group();
   if (type === 'n') {
     buildKnight(g, mat);
-    if (color === 'b') g.rotation.y = Math.PI; // face the white side
+    // knights face the enemy: white toward the black side (board −z), black toward white
+    if (color === 'w') g.rotation.y = Math.PI;
   } else {
     g.add(new THREE.Mesh(lathe(type), mat));
     addDecor(type, g, mat);

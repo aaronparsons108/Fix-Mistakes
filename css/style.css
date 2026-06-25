@@ -97,9 +97,9 @@ body {
 
 /* ── ink buttons ─────────────────────────────────────── */
 .ink-btn {
-  font-family: 'Typewriter', monospace; font-size: 15px; letter-spacing: .5px;
+  font-family: 'Typewriter', monospace; font-size: 13px; letter-spacing: .5px;
   color: #f2e3c0; background: linear-gradient(180deg, #4a2f1a, #2e1d10);
-  border: 1px solid #7a5a34; border-radius: 3px; padding: 11px 16px; cursor: pointer;
+  border: 1px solid #7a5a34; border-radius: 3px; padding: 9px 12px; cursor: pointer;
   transition: transform .12s, box-shadow .2s, filter .2s;
   box-shadow: 0 4px 14px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,220,170,0.12);
 }
@@ -119,12 +119,13 @@ body {
 
 /* ── quiz HUD ────────────────────────────────────────── */
 #quiz-hud {
-  left: 50%; bottom: 3vh; transform: translateX(-50%);
-  width: min(620px, 94vw); padding: 14px 20px 16px;
+  left: 18px; bottom: 18px;
+  width: min(310px, 80vw); padding: 13px 16px 14px;
+  opacity: 0.96;
 }
 .hud-top {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-family: 'Typewriter', monospace; font-size: 13px; letter-spacing: 1px; color: #5a4523;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  font-family: 'Typewriter', monospace; font-size: 12px; letter-spacing: 1px; color: #5a4523;
 }
 #hud-turn { color: var(--blood); }
 .pips { display: inline-flex; gap: 5px; margin-left: 8px; vertical-align: middle; }
@@ -133,9 +134,9 @@ body {
 .pip.failed { background: var(--q-bad); }
 .pip.current { background: var(--ember); box-shadow: 0 0 6px var(--ember); }
 .hud-feedback {
-  text-align: center; font-size: 21px; min-height: 30px; margin: 8px 0 4px; font-weight: 400;
+  text-align: center; font-size: 18px; min-height: 26px; margin: 7px 0 3px; font-weight: 400; line-height: 1.25;
 }
-.hud-feedback b { font-family: 'Typewriter', monospace; font-size: 19px; }
+.hud-feedback b { font-family: 'Typewriter', monospace; font-size: 16px; }
 .hud-feedback .dim { color: var(--ink-soft); font-style: italic; font-size: 16px; }
 .hud-feedback.ok { color: var(--q-best); }
 .hud-feedback.great { color: var(--q-great); }
