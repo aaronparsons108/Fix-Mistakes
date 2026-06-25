@@ -5,6 +5,8 @@
 import * as THREE from '../lib/three/three.module.js';
 import { tween } from './tween.js';
 
+export const HOST_COLOR = 0x3f5a2a;   // mossy green — the thing across the table
+
 const V = (r, y) => new THREE.Vector2(r, y);
 const PAWN = [V(0.30, 0), V(0.31, 0.05), V(0.20, 0.11), V(0.13, 0.24), V(0.19, 0.32), V(0.10, 0.42), V(0.075, 0.54), V(0.17, 0.62), V(0.165, 0.72), V(0.0, 0.74)];
 
@@ -20,7 +22,7 @@ export class Host {
     this.nextBlink = 1.5;
     this.scene = scene;
 
-    const skin = new THREE.MeshStandardMaterial({ color: 0x241c16, roughness: 0.55, metalness: 0.08, emissive: 0x0a0703, emissiveIntensity: 0.4 });
+    const skin = new THREE.MeshStandardMaterial({ color: HOST_COLOR, roughness: 0.6, metalness: 0.05, emissive: 0x0c1404, emissiveIntensity: 0.4 });
     const body = new THREE.Mesh(new THREE.LatheGeometry(PAWN, 36), skin);
     body.scale.set(2.7, 2.7, 2.7);
     body.castShadow = true; body.receiveShadow = true;

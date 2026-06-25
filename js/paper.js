@@ -4,6 +4,7 @@
 
 import * as THREE from '../lib/three/three.module.js';
 import { tween, tweenVec } from './tween.js';
+import { HOST_COLOR } from './host.js';
 
 const CW = 560, CH = 720;
 
@@ -23,12 +24,36 @@ export class Paper {
       roughness: 0.9, transparent: true,
     });
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 3.34), mat);
-    this.mesh.rotation.x = -0.28;   // near-vertical, tilted to face the raised camera
-    this.mesh.position.set(0, 1.55, -1.2);
+    this.mesh.rotation.x = -0.74;   // reclined to face the high camera, held up close
+    this.mesh.position.set(0, 2.9, 3.7);
     this.mesh.visible = false;
     this.mesh.castShadow = true;
+    this.mesh.add(this._hand());      // the host's hand grips the bottom edge
     scene.add(this.mesh);
     this._bg();
+  }
+
+  // a big green hand gripping the bottom of the sheet — fingers wrap over the
+  // front edge so it clearly reads as "held up for you"
+  _hand() {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: HOST_COLOR, roughness: 0.6, metalness: 0.08, emissive: 0x2c4a16, emissiveIntensity: 0.55 });
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.85, 0.42), mat);
+    palm.position.set(0, -0.28, -0.18); g.add(palm);
+    const knuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.5, 18, 1, false, 0, Math.PI), mat);
+    knuckle.rotation.z = Math.PI / 2; knuckle.position.set(0, 0.02, 0.0); g.add(knuckle);
+    for (let i = 0; i < 4; i++) {
+      const fx = -0.56 + i * 0.375;
+      const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.42, 5, 10), mat);
+      finger.position.set(fx, 0.18, 0.2); finger.rotation.x = 1.32; g.add(finger);
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), mat);
+      tip.position.set(fx, 0.46, 0.24); g.add(tip);
+    }
+    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.36, 5, 10), mat);
+    thumb.position.set(-0.82, 0.0, 0.12); thumb.rotation.z = 0.8; thumb.rotation.x = 0.8; g.add(thumb);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    g.position.set(0, -1.45, 0);
+    return g;
   }
 
   _bg() {
@@ -76,28 +101,15 @@ export class Paper {
     this.tex.needsUpdate = true;
   }
 
-  drawSummary(rank, lines) {
-    this._bg(); this._title('The verdict');
-    const x = this.ctx; this.lineBoxes = [];
-    x.fillStyle = '#5a2114'; x.textAlign = 'center'; x.font = "30px 'Special Elite', monospace";
-    x.fillText(rank, CW / 2, 168);
-    x.fillStyle = '#2c2114'; x.font = "25px 'IM Fell English', serif";
-    lines.forEach((ln, i) => x.fillText(ln, CW / 2, 240 + i * 52));
-    x.fillStyle = '#6a5638'; x.font = "italic 19px 'IM Fell English', serif";
-    x.fillText('— touch to play on —', CW / 2, CH - 70);
-    x.textAlign = 'left';
-    this.tex.needsUpdate = true;
-  }
-
   async slideIn() {
     this.mesh.visible = true; this.hidden = false;
-    this.mesh.position.set(0, 0.9, -4.2);   // start low near the host
-    // he raises it toward you, into the candlelight above the board
-    await tweenVec(this.mesh.position, { z: -1.2, y: 1.55 }, 800, 'easeInOutQuad');
+    this.mesh.position.set(0, 1.0, -4.0);   // start low near the host
+    // he reaches out and holds it up close for you to read
+    await tweenVec(this.mesh.position, { z: 3.7, y: 2.9 }, 850, 'easeInOutQuad');
   }
   async slideOut() {
     if (this.hidden) return;
-    await tweenVec(this.mesh.position, { z: -4.4, y: 0.9 }, 600, 'easeInOutQuad');
+    await tweenVec(this.mesh.position, { z: -4.2, y: 0.9 }, 600, 'easeInOutQuad');
     this.mesh.visible = false; this.hidden = true;
   }
 

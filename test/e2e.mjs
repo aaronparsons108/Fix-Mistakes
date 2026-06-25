@@ -124,10 +124,10 @@ try {
     await page.waitForFunction(() => !document.getElementById('btn-next').hidden, { timeout: 15000 });
   }
   await page.evaluate(() => window.__rmc.next());
-  await page.waitForFunction(() => window.__rmc.state === 'SUMMARY', { timeout: 15000 });
-  check(true, 'reaches the verdict (SUMMARY)');
+  await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
+  check(true, 'finishing a game returns to the games paper (no verdict screen)');
   await page.waitForTimeout(300);
-  await page.screenshot({ path: SHOTS + 'cabin-6-summary.png' });
+  await page.screenshot({ path: SHOTS + 'cabin-6-done.png' });
 
   await browser.close();
 } catch (e) {

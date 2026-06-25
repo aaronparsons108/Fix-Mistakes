@@ -13,8 +13,9 @@ export const BOARD_TOP = 0;
 
 const HL = {
   sel:        { color: 0xffb347, opacity: 0.5,  y: 0.014 },
-  'last-from':{ color: 0xb98a4a, opacity: 0.28, y: 0.010 },
-  'last-to':  { color: 0xb98a4a, opacity: 0.28, y: 0.010 },
+  // the opponent's last move — clearly readable amber-yellow tiles
+  'last-from':{ color: 0xe8c24a, opacity: 0.5,  y: 0.010 },
+  'last-to':  { color: 0xe8c24a, opacity: 0.62, y: 0.011 },
   check:      { color: 0xff2a2a, opacity: 0.6,  y: 0.012, pulse: true },
   'hint-glow':{ color: 0xffd24a, opacity: 0.5,  y: 0.016, pulse: true },
 };

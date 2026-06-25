@@ -63,9 +63,6 @@ canvas.addEventListener('click', (e) => {
   if (state.phase === 'PICK_GAME') {
     const i = paper.pick(e.clientX, e.clientY);
     if (i >= 0) pickGame(i);
-  } else if (state.phase === 'SUMMARY') {
-    const i = paper.pick(e.clientX, e.clientY);
-    if (i >= 0 || true) backToGames();
   }
 });
 
@@ -155,11 +152,11 @@ async function pickGame(i) {
   }
 }
 
-async function backToGames() {
+async function backToGames(line) {
   setPhase('PICK_GAME');
   $('quiz-hud').hidden = true;
   hush();
-  speak(`<span class="q">Choose</span> one to relive.`);
+  speak(line || `<span class="q">Choose</span> one to relive.`);
   paper.drawGameList(state.games);
   host.leanIn(); await paper.slideIn(); await host.leanBack();
 }
@@ -321,7 +318,14 @@ function retryCurrent() {
 
 function nextPuzzle() {
   if (state.idx + 1 < state.moments.length) loadPuzzle(state.idx + 1);
-  else showSummary();
+  else completeSession();
+}
+
+// No verdict screen — when the game is finished, return to the games paper.
+async function completeSession() {
+  state.idx = state.moments.length;
+  setFeedback('', '');
+  await backToGames('That game is wrung dry. <span class="q">Choose</span> another.');
 }
 
 /* ─────────────────────── reveal / hint ─────────────────── */
@@ -348,29 +352,6 @@ async function doReveal() {
   speak(`I would play <span class="q">${escapeText(m.bestSan)}</span>. Remember it.`);
   setFeedback(`BEST <b>${escapeText(m.bestSan)}</b> ${formatEval(m.evalBest, m.mateBest, m.userColor)} <span class="dim">· you played ${escapeText(m.playedSan)}</span>`, 'info');
   setButtons({ next: true });
-}
-
-/* ─────────────────────── summary ───────────────────────── */
-
-async function showSummary() {
-  setPhase('SUMMARY');
-  $('quiz-hud').hidden = true;
-  const s = state.stats, n = state.moments.length;
-  const score = (s.first * 2 + s.solved * 1.25 + s.accepted) / (n * 2);
-  const rank = score >= 0.9 ? 'SILICON GRANDMASTER'
-    : score >= 0.65 ? 'TACTICAL SURGEON'
-    : score >= 0.4 ? 'RISING TACTICIAN'
-    : score >= 0.15 ? 'PATTERN BUILDER'
-    : 'BLUNDER APPRENTICE';
-  const lines = [
-    `${s.first} found at once · ${s.solved + s.accepted} in time`,
-    `${s.revealed} I had to show thee`,
-    `${n} moments vs ${state.game.opponent}`,
-  ];
-  paper.drawSummary(rank, lines);
-  speak(score >= 0.65 ? 'Thy mistakes shall not fool thee <span class="q">twice</span>.' : 'Come again. Repetition turns blunders into <span class="q">instinct</span>.');
-  flareCandles(); sounds.fanfare();
-  host.leanIn(); await paper.slideIn(); await host.leanBack();
 }
 
 /* ─────────────────────── HUD helpers ───────────────────── */
