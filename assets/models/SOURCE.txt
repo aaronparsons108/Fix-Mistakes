@@ -1,0 +1,4 @@
+Chess piece models (pawn/knight/bishop/rook/queen/king .glb)
+Source: https://github.com/ordamari/3d-chess (public/models/)
+The upstream repository does not include an explicit license file.
+Used here as placeholder art; replace with a model of your choosing/licensing if needed.

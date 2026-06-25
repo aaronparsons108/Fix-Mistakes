@@ -48,9 +48,13 @@ picks up fresh code. Deep link: `?user=yourname` pre-fills the name.
 ## Tech
 
 - **No build step, no framework, no backend.** Vanilla ES modules + WebGL.
-- `lib/three/` — Three.js r184 (core ESM), used to build the whole scene from
-  primitives: candlelit cabin, table, procedural chess pieces (lathe profiles),
-  the pawn host, and a canvas-textured parchment. No 3D model files.
+- `lib/three/` — Three.js r184 (core ESM) + the GLTFLoader addon, used to
+  build the scene (candlelit cabin, table, the pawn host, parchment) and to
+  load the chess pieces.
+- `assets/models/*.glb` — the chess piece models, loaded with GLTFLoader and
+  painted ivory/dark at runtime. Source: github.com/ordamari/3d-chess (see
+  `assets/models/SOURCE.txt`; the upstream repo has no explicit license, so
+  treat these as placeholder art and swap if you need a specific license).
 - `lib/stockfish.*` — Stockfish 10 (WASM, asm.js fallback) in a Web Worker.
 - `lib/chess.js` — move generation / PGN parsing.
 - `assets/fonts/` — self-hosted *IM Fell English* (old serif) + *Special Elite*

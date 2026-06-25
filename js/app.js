@@ -12,6 +12,7 @@ import { initScene, scene, camera, onFrame, flareCandles, setLampControl, getLam
 import { Board3D } from './board3d.js';
 import { Host, HOST_COLOR } from './host.js';
 import { Paper } from './paper.js';
+import { loadPieces } from './pieces.js';
 import { FAST, wait } from './tween.js';
 import { sounds, toggleMute, isMuted } from './sound.js';
 import { floatLabel, sparkle, speak, hush, toast, askPromotion } from './ui.js';
@@ -48,7 +49,6 @@ board = new Board3D(scene, camera, {
   onUserMove: handleUserMove,
 });
 board.setOrientation('w');
-board.setPosition(START_FEN);
 host = new Host(scene);
 paper = new Paper(scene, camera);
 board.bindPointer(canvas);
@@ -109,7 +109,9 @@ canvas.addEventListener('click', (e) => {
 
 async function boot() {
   state.engine.init().catch(() => {}); // warm the engine
-  await wait(400);
+  try { await loadPieces(); } catch (e) { console.error('piece models failed to load', e); }
+  board.setPosition(START_FEN);
+  await wait(300);
   $('boot').classList.add('gone');
   setPhase('ASK_USERNAME');
   speak(`You look <span class="q">lost</span>. Sit. Tell me your <span class="q">chess.com</span> name… and I'll show you where the games <span class="q">slipped away</span>.`);
