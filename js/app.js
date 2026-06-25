@@ -440,7 +440,7 @@ function judge(kind, m, uci, evalAfter) {
     state.attempts === 1 ? state.stats.first++ : state.stats.solved++;
     renderCounter();
     setFeedback(
-      `<b>${san}</b> · BEST <span class="dim">${state.attempts === 1 ? 'first try' : 'in ' + state.attempts + ' tries'}</span>`,
+      `<b>${san}</b>: BEST <span class="dim">${state.attempts === 1 ? 'first try' : 'in ' + state.attempts + ' tries'}</span>`,
       'ok'
     );
     setButtons({ next: true });
@@ -451,7 +451,7 @@ function judge(kind, m, uci, evalAfter) {
     burst(x, y, 'great');
     floatLabel(x, y, 'GREAT', 'great');
     sounds.great();
-    setFeedback(`<b>${san}</b> · GREAT <span class="dim">not the best — retry or keep</span>`, 'great');
+    setFeedback(`<b>${san}</b>: GREAT <span class="dim">not the best</span>`, 'great');
     setButtons({ retry: true, accept: true, idk: true });
     return;
   }
@@ -460,16 +460,14 @@ function judge(kind, m, uci, evalAfter) {
     burst(x, y, 'warn', { particles: 16, power: 0.75 });
     floatLabel(x, y, 'INACCURATE', 'warn');
     sounds.wrong();
-    setFeedback(`<b>${san}</b> · INACCURATE <span class="dim">retry</span>`, 'warn');
+    setFeedback(`<b>${san}</b>: INACCURATE`, 'warn');
   } else {
     burst(x, y, 'bad');
     floatLabel(x, y, sameAsGame ? 'SAME AS GAME' : 'WORSE', 'bad');
     shake($('board-frame'));
     sounds.wrong();
     setFeedback(
-      sameAsGame
-        ? `<b>${san}</b> · YOUR GAME MOVE <span class="dim">retry</span>`
-        : `<b>${san}</b> · WORSE <span class="dim">retry</span>`,
+      sameAsGame ? `<b>${san}</b>: YOUR GAME MOVE` : `<b>${san}</b>: WORSE`,
       'bad'
     );
   }
