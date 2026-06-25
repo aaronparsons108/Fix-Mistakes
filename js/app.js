@@ -649,6 +649,25 @@ $('btn-new-player').addEventListener('click', () => showScreen('screen-landing')
 
 /* ─────────────────────── misc wiring ──────────────────────── */
 
+// 3D / 2D board toggle (persisted). 3D is the default unless the user opts out
+// or the OS asks for reduced motion.
+const threeDBtn = $('btn-3d');
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let is3d = localStorage.getItem('revisemychess-3d');
+is3d = is3d === null ? !prefersReduced : is3d === '1';
+function apply3d() {
+  document.body.classList.toggle('is3d', is3d);
+  threeDBtn.classList.toggle('muted', !is3d);
+  threeDBtn.textContent = is3d ? '♟ 3D' : '▦ 2D';
+  threeDBtn.title = is3d ? 'Switch to flat board' : 'Switch to 3D board';
+}
+apply3d();
+threeDBtn.addEventListener('click', () => {
+  is3d = !is3d;
+  localStorage.setItem('revisemychess-3d', is3d ? '1' : '0');
+  apply3d();
+});
+
 const soundBtn = $('btn-sound');
 soundBtn.classList.toggle('muted', isMuted());
 soundBtn.textContent = isMuted() ? '🔇' : '🔊';

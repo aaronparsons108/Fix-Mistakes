@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="css/style.css" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>♞</text></svg>" />
 </head>
-<body>
+<body class="is3d">
 <div class="bg-grid" aria-hidden="true"></div>
 <div class="bg-glow" aria-hidden="true"></div>
 
@@ -20,6 +20,7 @@
     <span class="brand-name">REVISE<em>MYCHESS</em></span>
   </button>
   <div class="topbar-right">
+    <button id="btn-3d" class="icon-btn" title="Toggle 3D board">♟ 3D</button>
     <button id="btn-sound" class="icon-btn" title="Toggle sound">🔊</button>
   </div>
 </header>
@@ -93,8 +94,14 @@
     <div class="quiz-layout">
       <div class="board-zone">
         <div class="board-meta" id="board-meta-top"></div>
-        <div class="board-frame" id="board-frame">
-          <div id="board" class="board"></div>
+        <div class="scene">
+          <div class="table" aria-hidden="true">
+            <div class="table-grain"></div>
+          </div>
+          <div class="board-frame" id="board-frame">
+            <div class="board-rim" aria-hidden="true"></div>
+            <div id="board" class="board"></div>
+          </div>
         </div>
         <div class="board-meta" id="board-meta-bottom"></div>
       </div>

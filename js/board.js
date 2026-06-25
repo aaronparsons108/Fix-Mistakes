@@ -107,7 +107,9 @@ export class Board {
   _place(piece, sq, animate = true) {
     const { x, y } = this._coords(sq);
     if (!animate) piece.classList.add('no-anim');
-    piece.style.transform = `translate(${x * 100}%, ${y * 100}%)`;
+    piece.dataset.square = sq;
+    // --piece-stand counter-rotates the glyph upright in 3D mode (0deg in 2D)
+    piece.style.transform = `translate(${x * 100}%, ${y * 100}%) rotateX(var(--piece-stand, 0deg))`;
     if (!animate) requestAnimationFrame(() => piece.classList.remove('no-anim'));
   }
 
@@ -215,13 +217,16 @@ export class Board {
     }
   }
 
+  // Hit-test via the real DOM stack rather than board geometry, so it stays
+  // correct when the board is tilted in 3D (perspective transforms). Squares
+  // and pieces both carry data-square; dots/coords resolve to their square.
   _squareFromPoint(clientX, clientY) {
-    const r = this.el.getBoundingClientRect();
-    let x = Math.floor(((clientX - r.left) / r.width) * 8);
-    let y = Math.floor(((clientY - r.top) / r.height) * 8);
-    if (x < 0 || x > 7 || y < 0 || y > 7) return null;
-    if (this.orientation === 'b') { x = 7 - x; y = 7 - y; }
-    return FILES[x] + (8 - y);
+    for (const el of document.elementsFromPoint(clientX, clientY)) {
+      if (!this.el.contains(el)) continue;
+      const sqEl = el.closest('[data-square]');
+      if (sqEl) return sqEl.dataset.square;
+    }
+    return null;
   }
 
   _bindPointer() {
@@ -260,7 +265,8 @@ export class Board {
       drag.piece.classList.add('dragging');
       const { x, y } = this._coords(drag.sq);
       drag.piece.style.transform =
-        `translate(${x * 100 + (dx / drag.cell) * 100}%, ${y * 100 + (dy / drag.cell) * 100}%) scale(1.15)`;
+        `translate(${x * 100 + (dx / drag.cell) * 100}%, ${y * 100 + (dy / drag.cell) * 100}%) ` +
+        `rotateX(var(--piece-stand, 0deg)) scale(1.15)`;
     });
 
     const endDrag = (e) => {

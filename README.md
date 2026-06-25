@@ -59,6 +59,11 @@ Deep link: `http://localhost:8080/?user=yourname` pre-fills your username.
   see `lib/chess.js.LICENSE`).
 - Interactive board (click-to-move + drag & drop, promotion picker,
   legal-move dots, check highlights) built from scratch in `js/board.js`.
+  Renders as a **3D board on a table** by default (CSS 3D perspective —
+  the board tilts into the scene and the pieces stand up to face you);
+  toggle to a flat 2D board with the ♟ 3D button. Pointer hit-testing
+  uses the real DOM stack (`elementsFromPoint`) so clicks and drags stay
+  pixel-accurate even when the board is tilted.
 - Particle bursts, screen sweeps and confetti via the Web Animations API
   (`js/effects.js`); sound effects synthesized with WebAudio (`js/sound.js`)
   — zero media assets.

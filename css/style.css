@@ -344,6 +344,23 @@ body {
 .board-zone { flex: 0 1 auto; }
 .board-meta { color: var(--text-dim); font-weight: 600; font-size: 16px; padding: 6px 4px; min-height: 30px; letter-spacing: 1px; }
 
+/* ── 3D scene: a board on a table in a room ──────────── */
+.scene {
+  position: relative;
+  display: grid; place-items: center;
+  perspective: 1600px;
+  perspective-origin: 50% 36%;
+}
+.table {
+  position: absolute; left: 50%; top: 50%;
+  width: 260%; height: 260%;
+  transform: translate(-50%, -50%);
+  opacity: 0; pointer-events: none;
+  transition: opacity .5s;
+}
+.table-grain { position: absolute; inset: 0; }
+.board-rim { display: none; }
+
 .board-frame {
   position: relative;
   padding: 10px;
@@ -353,7 +370,8 @@ body {
     0 0 0 1px rgba(255,255,255,0.06),
     0 0 0 1px rgba(255,38,52,0.12),
     0 28px 64px rgba(0,0,0,0.7);
-  transition: transform .5s cubic-bezier(.2,.9,.3,1);
+  transform-style: preserve-3d;
+  transition: transform .6s cubic-bezier(.2,.9,.3,1), box-shadow .4s;
 }
 .board-frame.flip-out { transform: rotateY(90deg) scale(.9); }
 .board-frame.shake { animation: boardShake .45s; }
@@ -371,6 +389,7 @@ body {
   aspect-ratio: 1;
   border-radius: 6px; overflow: hidden;
   user-select: none; touch-action: none;
+  transform-style: preserve-3d;
 }
 .square { position: absolute; width: 12.5%; height: 12.5%; }
 .square.light { background: var(--sq-light); }
@@ -416,7 +435,7 @@ body {
   will-change: transform;
   z-index: 2;
 }
-.piece.dragging { transition: none; z-index: 10; cursor: grabbing; transform-origin: center; }
+.piece.dragging { transition: none; z-index: 10; cursor: grabbing; pointer-events: none; }
 .piece.w { color: #f8f8fa; text-shadow: 0 2px 3px rgba(0,0,0,.9), 0 0 2px #000, 0 0 12px rgba(255,255,255,0.18); }
 .piece.b {
   color: #0a0a0b;
@@ -427,6 +446,53 @@ body {
     0 0 12px rgba(255,38,52,.35);
 }
 .piece.no-anim { transition: none; }
+
+/* ════════ 3D MODE — sitting at a table ════════════════ */
+body.is3d .scene { padding-top: 64px; padding-bottom: 8px; }
+/* warm overhead pool of light spilling onto the table */
+body.is3d .scene::before {
+  content: ''; position: absolute; left: 50%; top: 40%;
+  width: 150%; height: 150%; transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse at 50% 45%,
+    rgba(255,186,124,0.16), rgba(255,120,80,0.05) 38%, transparent 66%);
+  pointer-events: none; z-index: 0;
+}
+body.is3d .board-zone { position: relative; }
+
+/* the wooden tabletop the board rests on */
+body.is3d .table {
+  opacity: 1;
+  transform: translate(-50%, -50%) rotateX(54deg) translateZ(-14px);
+}
+body.is3d .table-grain {
+  position: absolute; inset: 0; border-radius: 14px;
+  background:
+    repeating-linear-gradient(95deg, rgba(0,0,0,0.16) 0 3px, rgba(255,255,255,0.018) 3px 34px),
+    linear-gradient(170deg, #6e4a2c, #43281699 52%, #241308);
+  box-shadow: inset 0 0 160px rgba(0,0,0,0.7), inset 0 0 0 2px rgba(0,0,0,0.5);
+}
+
+/* tilt the board back onto the table */
+body.is3d .board-frame {
+  transform: rotateX(54deg);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.06),
+    0 34px 44px -8px rgba(0,0,0,0.85);
+}
+/* overflow must stay visible or preserve-3d flattens and pieces lie down */
+body.is3d .board { overflow: visible; --piece-stand: -54deg; }
+
+/* stand the pieces upright, facing the player, with a contact shadow */
+body.is3d .piece {
+  transform-origin: center bottom;
+  font-size: calc(min(82vw, 60vh, 560px) / 8 * 0.82);
+  filter: drop-shadow(0 4px 3px rgba(0,0,0,0.6));
+}
+body.is3d .piece.w { text-shadow: 0 1px 1px rgba(0,0,0,.5), 0 0 2px #000; }
+
+@media (prefers-reduced-motion: reduce) {
+  body.is3d .board-frame, body.is3d .table { transition: none; }
+}
 
 /* ── board arrows ────────────────────────────────────── */
 .arrow-layer {

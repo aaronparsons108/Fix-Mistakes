@@ -48,13 +48,11 @@ const FIXTURES = {
   },
 };
 
-function clickSquare(page, board, sq) {
-  // white orientation: a1 bottom-left
-  return board.boundingBox().then((bb) => {
-    const f = sq.charCodeAt(0) - 97;
-    const r = 8 - parseInt(sq[1], 10);
-    return page.mouse.click(bb.x + ((f + 0.5) / 8) * bb.width, bb.y + ((r + 0.5) / 8) * bb.height);
-  });
+async function clickSquare(page, board, sq) {
+  // click the real square element's centre — correct in both 2D and 3D (the
+  // board may be tilted in perspective, so geometry math wouldn't line up)
+  const box = await page.locator(`.square[data-square="${sq}"]`).boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
 
 const server = spawn('npx', ['http-server', '-p', String(PORT), '-s'], { stdio: 'ignore' });
@@ -104,6 +102,13 @@ try {
 
   const board = page.locator('#board');
   check(await page.locator('.board-arrow.played').count() === 1, 'red arrow marks the game move');
+
+  // 3D is on by default; the toggle flips to a flat board and back
+  check(await page.evaluate(() => document.body.classList.contains('is3d')), '3D board on by default');
+  await page.click('#btn-3d');
+  check(!(await page.evaluate(() => document.body.classList.contains('is3d'))), '3D toggle switches to flat');
+  await page.click('#btn-3d');
+  check(await page.evaluate(() => document.body.classList.contains('is3d')), '3D toggle switches back');
 
   // Puzzle 1: best move is Nxd4 (f3 -> d4)
   await clickSquare(page, board, 'f3');
