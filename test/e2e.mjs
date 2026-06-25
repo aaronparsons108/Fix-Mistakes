@@ -80,53 +80,50 @@ try {
   await page.waitForFunction(() => window.__rmc.state === 'QUIZ', { timeout: 120000 });
   check(true, 'analysis completes and the quiz begins (QUIZ)');
   const total = await page.evaluate(() => window.__rmc.results.length);
-  console.log(`     (analysis found ${total} critical moments)`);
+  console.log(`     (analysis found ${total} critical moment(s))`);
+  check(total >= 1, 'analysis finds at least one blunder/mistake');
   await page.waitForFunction(() => !window.__rmc.busy, { timeout: 30000 }); // move-by-move playback finishes
   check(true, 'plays through the game to the critical position');
   await page.screenshot({ path: SHOTS + 'cabin-3-quiz.png' });
 
-  // REAL raycast move: best move on puzzle 1 is Nxd4 (f3 -> d4)
-  const from = await page.evaluate(() => window.__rmc.squareToClient('f3'));
+  // REAL raycast move: play this puzzle's best move (whatever it is)
+  const best = await page.evaluate(() => window.__rmc.puzzle.bestUci);
+  const from = await page.evaluate((b) => window.__rmc.squareToClient(b.slice(0, 2)), best);
   await page.mouse.click(from.x, from.y);
   await page.waitForTimeout(120);
-  const to = await page.evaluate(() => window.__rmc.squareToClient('d4'));
+  const to = await page.evaluate((b) => window.__rmc.squareToClient(b.slice(2, 4)), best);
   await page.mouse.click(to.x, to.y);
   await page.waitForFunction(() => window.__rmc.results[0] != null, { timeout: 30000 });
-  check(await page.evaluate(() => window.__rmc.results[0] === 'first'), 'raycast click-to-move solves puzzle 1 (best, first try)');
+  check(await page.evaluate(() => window.__rmc.results[0] === 'first'), 'raycast click-to-move solves the best move first try');
   await page.screenshot({ path: SHOTS + 'cabin-4-correct.png' });
 
   // ← retries even after solving, without re-scoring
   await page.evaluate(() => window.__rmc.retry());
   await page.waitForTimeout(150);
-  await page.evaluate(() => window.__rmc.playMove('f3', 'd4'));
+  await page.evaluate(() => { const b = window.__rmc.puzzle.bestUci; return window.__rmc.playMove(b.slice(0, 2), b.slice(2, 4), b[4]); });
   await page.waitForTimeout(200);
   check(await page.evaluate(() => window.__rmc.results[0] === 'first'), 'replaying a solved puzzle does not re-score it');
 
-  // advance to puzzle 2
-  await page.evaluate(() => window.__rmc.next());
-  await page.waitForFunction(() => window.__rmc.puzzleIndex === 1, { timeout: 15000 });
-  await page.waitForFunction(() => !window.__rmc.busy, { timeout: 30000 });
-
-  // hint persists through a wrong move
-  await page.evaluate(() => window.__rmc.hint());
-  await page.evaluate(() => window.__rmc.playMove('a2', 'a3'));
-  await page.waitForTimeout(250);
-  check(await page.evaluate(() => window.__rmc.hintActive), 'hint highlight persists through a wrong move');
-
-  // give up -> reveal the best move (Bxf7+)
-  await page.evaluate(() => window.__rmc.reveal());
-  await page.waitForFunction(() => /Bxf7\+/.test(document.getElementById('hud-feedback').textContent), { timeout: 15000 });
-  check(true, 'I-don\'t-know reveals the best move (Bxf7+)');
-  await page.screenshot({ path: SHOTS + 'cabin-5-reveal.png' });
-
-  // burn through the rest -> summary
-  for (let p = 2; p < total; p++) {
+  // remaining puzzles: exercise hint-persistence + reveal generically
+  for (let p = 1; p < total; p++) {
     await page.evaluate(() => window.__rmc.next());
     await page.waitForFunction((n) => window.__rmc.puzzleIndex === n, p, { timeout: 15000 });
     await page.waitForFunction(() => !window.__rmc.busy, { timeout: 30000 });
+
+    if (p === 1) {
+      // hint, then play the (bad) game move; the hint should persist
+      await page.evaluate(() => window.__rmc.hint());
+      await page.evaluate(() => { const u = window.__rmc.puzzle.playedUci; return window.__rmc.playMove(u.slice(0, 2), u.slice(2, 4), u[4]); });
+      await page.waitForTimeout(250);
+      check(await page.evaluate(() => window.__rmc.hintActive), 'hint highlight persists through a wrong move');
+    }
+    const bestSan = await page.evaluate(() => window.__rmc.puzzle.bestSan);
     await page.evaluate(() => window.__rmc.reveal());
+    await page.waitForFunction((s) => document.getElementById('hud-feedback').textContent.includes(s), bestSan, { timeout: 15000 });
+    if (p === 1) check(true, 'I-don\'t-know reveals the best move');
     await page.waitForFunction(() => !document.getElementById('btn-next').hidden, { timeout: 15000 });
   }
+  await page.screenshot({ path: SHOTS + 'cabin-5-reveal.png' });
   await page.evaluate(() => window.__rmc.next());
   await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
   check(true, 'finishing a game returns to the games paper (no verdict screen)');

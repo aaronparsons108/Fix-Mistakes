@@ -19,7 +19,7 @@ import { floatLabel, sparkle, speak, hush, toast, askPromotion } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
-const ANALYSIS_DEPTH = 12, JUDGE_DEPTH = 13;
+const JUDGE_DEPTH = 15;   // match the deep analysis pass when scoring attempts
 const BEST_TOL = 25, GREAT_TOL = 80, GOOD_TOL = 160;
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
@@ -182,13 +182,15 @@ async function pickGame(i) {
   setPhase('ANALYZING');
   sounds.tick();
   await paper.slideOut();
-  speak("Let's see how it <span class=\"q\">fell apart</span>…");
+  speak("Let me <span class=\"q\">study</span> it…");
   flareCandles();
   try {
     await state.engine.init();
-    const { moments } = await analyzeGame(game, state.engine, { depth: ANALYSIS_DEPTH });
+    const { moments } = await analyzeGame(game, state.engine, {
+      onProgress: (d, t) => { if (state.phase === 'ANALYZING') speak(`Let me <span class="q">study</span> it… ${Math.round((d / t) * 100)}%`); },
+    });
     if (!moments.length) {
-      speak('No real blunder here — you were just <span class="q">outplayed</span>. Pick another.');
+      speak('No real blunders here — you were just <span class="q">outplayed</span>. Pick another.');
       backToGames();
       return;
     }
@@ -534,6 +536,10 @@ window.__rmc = {
   set fastForward(v) { FAST.on = !!v; },
   get hintActive() { return board.hasHighlight('hint-glow'); },
   get busy() { return state.locked || state.playing; },
+  get puzzle() {
+    const m = state.moments[state.idx];
+    return m ? { bestUci: m.bestUci, bestSan: m.bestSan, playedUci: m.playedUci, severity: m.severity } : null;
+  },
   get lamp() { return getLampControl(); },
   setLamp(t) { setLampControl(t); },
   submitUsername(name) { return doFetch(name); },
