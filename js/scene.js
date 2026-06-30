@@ -55,25 +55,31 @@ export function resize() {
   scaleVignette();
 }
 
-/* ── room & table: the inside of a grey brick tower ──── */
+/* ── room: the fully-enclosed inside of a grey brick tower ── */
 function buildRoom() {
-  // round tower wall (inside-facing)
-  const wall = new THREE.Mesh(
-    new THREE.CylinderGeometry(18, 18, 30, 56, 1, true),
-    new THREE.MeshStandardMaterial({ map: brickTexture(), roughness: 0.97, metalness: 0, side: THREE.BackSide })
-  );
-  wall.position.set(0, 7, -1); wall.receiveShadow = true;
+  const brick = new THREE.MeshStandardMaterial({ map: brickTexture(), roughness: 0.97, metalness: 0, side: THREE.BackSide });
+  // round tower wall (inside-facing), tall enough to seal floor→ceiling
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 34, 56, 1, true), brick);
+  wall.position.set(0, 8, -1); wall.receiveShadow = true;
   scene.add(wall);
 
-  // flagstone floor
+  // solid stone floor that runs under the wall (no gap, no grid showing void)
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(44, 44),
+    new THREE.CircleGeometry(17, 56),
     new THREE.MeshStandardMaterial({ map: stoneTexture(), roughness: 0.95, metalness: 0 })
   );
-  floor.rotation.x = -Math.PI / 2; floor.position.y = -4.5; floor.receiveShadow = true;
+  floor.rotation.x = -Math.PI / 2; floor.position.set(0, -4.5, -1); floor.receiveShadow = true;
   scene.add(floor);
 
-  // no table — the board floats; the host stands behind it on the floor
+  // ceiling cap so nothing opens to the sky overhead
+  const ceil = new THREE.Mesh(
+    new THREE.CircleGeometry(17, 56),
+    new THREE.MeshStandardMaterial({ color: 0x141416, roughness: 1, side: THREE.DoubleSide })
+  );
+  ceil.rotation.x = Math.PI / 2; ceil.position.set(0, 24.5, -1);
+  scene.add(ceil);
+
+  // the board floats; the host stands behind it on the floor
   buildWindow();
   buildGodRay();
   buildTorches();
@@ -187,14 +193,19 @@ function brickTexture() {
 }
 
 function stoneTexture() {
+  // plain mottled dark stone — no grid lines
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const x = c.getContext('2d');
-  x.fillStyle = '#3e3e44'; x.fillRect(0, 0, 256, 256);
-  x.strokeStyle = 'rgba(0,0,0,0.4)'; x.lineWidth = 3;
-  for (let i = 0; i <= 256; i += 64) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, 256); x.moveTo(0, i); x.lineTo(256, i); x.stroke(); }
-  for (let i = 0; i < 400; i++) { x.globalAlpha = 0.05; x.fillStyle = Math.random() > 0.5 ? '#000' : '#fff'; x.fillRect(Math.random() * 256, Math.random() * 256, 3, 3); }
+  x.fillStyle = '#2f2f34'; x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 900; i++) {
+    x.globalAlpha = 0.05 + Math.random() * 0.06;
+    const v = 30 + Math.floor(Math.random() * 36);
+    x.fillStyle = `rgb(${v},${v},${v + 3})`;
+    x.beginPath(); x.arc(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 9, 0, 7); x.fill();
+  }
+  x.globalAlpha = 1;
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(8, 8);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(5, 5);
   return t;
 }
 
