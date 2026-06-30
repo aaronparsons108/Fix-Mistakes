@@ -84,6 +84,16 @@ export class Board3D {
     this.group.rotation.y = color === 'w' ? 0 : Math.PI;
   }
 
+  // animated 180° flip to the other side's view
+  flip() {
+    if (this._flipping) return;
+    this._flipping = true;
+    this.orientation = this.orientation === 'w' ? 'b' : 'w';
+    const from = this.group.rotation.y, to = from + Math.PI;
+    tween({ ms: 650, ease: 'easeInOutQuad', onUpdate: (v) => { this.group.rotation.y = from + (to - from) * v; } })
+      .then(() => { this.group.rotation.y = this.orientation === 'w' ? 0 : Math.PI; this._flipping = false; });
+  }
+
   /* ── position ───────────────────────────────────────── */
   setPosition(fen) {
     this.clearSelection();

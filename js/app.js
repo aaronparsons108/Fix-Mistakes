@@ -12,6 +12,7 @@ import { initScene, scene, camera, onFrame, flareCandles, setLampControl, getLam
 import { Board3D } from './board3d.js';
 import { Host, HOST_COLOR } from './host.js';
 import { Paper } from './paper.js';
+import { FlipButton } from './flipbutton.js';
 import { loadPieces } from './pieces.js';
 import { FAST, wait } from './tween.js';
 import { sounds, toggleMute, isMuted } from './sound.js';
@@ -52,6 +53,7 @@ board = new Board3D(scene, camera, {
 board.setOrientation('w');
 host = new Host(scene);
 paper = new Paper(scene, camera);
+const flipBtn = new FlipButton(scene, () => { sounds.tick(); board.flip(); });
 board.bindPointer(canvas);
 
 // the host's long arm, stretched from its body to the hand holding the paper
@@ -85,7 +87,13 @@ function ropeHit(e) {
   ropeRay.setFromCamera(new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1), camera);
   return ropeRay.intersectObject(knob).length > 0;
 }
+function widgetRay(e) {
+  ropeRay.setFromCamera(new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1), camera);
+  return ropeRay;
+}
 canvas.addEventListener('pointerdown', (e) => {
+  // the FLIP button takes priority over board/rope
+  if (flipBtn.hitTest(widgetRay(e))) { flipBtn.press(); e.stopImmediatePropagation(); return; }
   if (!ropeHit(e)) return;
   ropeDrag = { startY: e.clientY, startT: getLampControl() };
   canvas.setPointerCapture(e.pointerId);
@@ -540,6 +548,8 @@ window.__rmc = {
   },
   get lamp() { return getLampControl(); },
   setLamp(t) { setLampControl(t); },
+  get orientation() { return board.orientation; },
+  flip() { board.flip(); },
   submitUsername(name) { return doFetch(name); },
   pickGame(i) { return pickGame(i); },
   squareToClient(sq) { return board.squareCenter(sq, 0); },
