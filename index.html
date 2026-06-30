@@ -55,6 +55,33 @@
   <div class="hud-hint">←&nbsp;retry&nbsp;·&nbsp;→&nbsp;next</div>
 </div>
 
+<!-- mode picker -->
+<div id="mode-overlay" class="modal" hidden>
+  <div class="parchment scrap mode-card">
+    <p id="mode-title">How shall we look at this game?</p>
+    <div class="mode-choices">
+      <button class="ink-btn go" id="btn-mode-fix">⚔ Fix Mistakes<small>find &amp; replay your blunders</small></button>
+      <button class="ink-btn" id="btn-mode-review">📖 Simple Review<small>step through it move by move</small></button>
+    </div>
+    <button class="link-btn" id="btn-mode-back">← back to games</button>
+  </div>
+</div>
+
+<!-- simple-review HUD -->
+<div id="review-hud" class="parchment" hidden>
+  <div id="rev-move" class="rev-move"></div>
+  <div id="rev-line" class="rev-line"></div>
+  <div class="hud-hint">←&nbsp;back&nbsp;·&nbsp;→&nbsp;forward&nbsp;·&nbsp;drag a piece to explore</div>
+  <button class="link-btn" id="btn-rev-exit">✕ leave review</button>
+</div>
+
+<!-- vertical eval bar (review) -->
+<div id="evalbar" class="evalbar" hidden>
+  <div class="eb-fill" id="eb-fill"></div>
+  <div class="eb-zero"></div>
+  <div class="eb-num" id="eb-num">0.0</div>
+</div>
+
 <!-- promotion picker -->
 <div id="promo-modal" class="modal" hidden>
   <div class="parchment scrap">

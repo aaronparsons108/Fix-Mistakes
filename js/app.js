@@ -6,7 +6,7 @@
 import * as THREE from '../lib/three/three.module.js';
 import { Chess } from '../lib/chess.js';
 import { Engine, formatEval } from './engine.js';
-import { fetchPlayer, fetchLostGames } from './chesscom.js';
+import { fetchPlayer, openGameFeed } from './chesscom.js';
 import { analyzeGame, parseGame, uciToSan } from './analysis.js';
 import { initScene, scene, camera, onFrame, flareCandles, setLampControl, getLampControl, getRopeKnob } from './scene.js';
 import { Board3D } from './board3d.js';
@@ -33,6 +33,8 @@ const state = {
   session: 0, stats: null, results: [],
   gaze: null,
   allMoves: [], playing: false, skipPlayback: false,
+  feed: null, page: 0,              // paginated game feed
+  rev: null, evalSession: 0,        // simple-review state
 };
 
 let board, host, paper;
@@ -43,12 +45,12 @@ const headless = navigator.webdriver === true || new URLSearchParams(location.se
 const canvas = $('webgl');
 initScene(canvas, { headless });
 board = new Board3D(scene, camera, {
-  canMove: () => state.phase === 'QUIZ' && !state.locked,
+  canMove: () => (state.phase === 'QUIZ' && !state.locked) || state.phase === 'REVIEW',
   getLegalMoves: (sq) => {
-    if (!state.quiz) return [];
-    return state.quiz.moves({ square: sq, verbose: true });
+    const c = state.phase === 'REVIEW' ? state.rev?.chess : state.quiz;
+    return c ? c.moves({ square: sq, verbose: true }) : [];
   },
-  onUserMove: handleUserMove,
+  onUserMove: (m) => (state.phase === 'REVIEW' ? reviewPlayMove(m) : handleUserMove(m)),
 });
 board.setOrientation('w');
 host = new Host(scene);
@@ -111,12 +113,14 @@ canvas.addEventListener('pointercancel', ropeEnd, true);
 // click anywhere on the board to skip the move-by-move playback
 canvas.addEventListener('pointerdown', () => { if (state.playing) state.skipPlayback = true; });
 
-// pick games / advance summary by clicking the parchment
+// pick games / page through the parchment
 canvas.addEventListener('click', (e) => {
-  if (state.phase === 'PICK_GAME') {
-    const i = paper.pick(e.clientX, e.clientY);
-    if (i >= 0) pickGame(i);
-  }
+  if (state.phase !== 'PICK_GAME') return;
+  const hit = paper.pick(e.clientX, e.clientY);
+  if (!hit) return;
+  if (hit.type === 'game') pickGame(hit.index);
+  else if (hit.type === 'next') changePage(1);
+  else if (hit.type === 'prev') changePage(-1);
 });
 
 async function boot() {
@@ -157,17 +161,18 @@ async function doFetch(name) {
   setPhase('FETCHING');
   const err = $('username-error'); err.hidden = true;
   const go = $('username-go'); go.disabled = true; go.textContent = 'he listens…';
-  speak('Hmm. Let me <span class="q">remember</span> your defeats…');
+  speak('Hmm. Let me <span class="q">remember</span> your games…');
   try {
     await fetchPlayer(name);
-    const games = await fetchLostGames(name);
-    if (!games.length) throw new Error("No losses? Either you're unbeatable, or you're lying.");
-    state.username = name; state.games = games;
+    const feed = await openGameFeed(name, { size: 5 });
+    const games = await feed.page(0);
+    if (!games.length) throw new Error("No games here. Are you sure that's the name?");
+    state.username = name; state.feed = feed; state.page = 0; state.games = games;
     $('username-panel').hidden = true;
     $('btn-rename').hidden = false;
     setPhase('PICK_GAME');
-    speak(`So many, ${escapeText(name)}. <span class="q">Pick</span> one to relive.`);
-    paper.drawGameList(games);
+    speak(`Here they are, ${escapeText(name)}. <span class="q">Pick</span> one.`);
+    paper.drawGameList(games, { page: 0, hasMore: feed.hasMore(0) });
     host.leanIn();
     await paper.slideIn();
     await host.leanBack();
@@ -181,14 +186,41 @@ async function doFetch(name) {
   }
 }
 
+// Page forward (older) / backward (newer) through the game feed.
+async function changePage(delta) {
+  if (!state.feed || state.phase !== 'PICK_GAME') return;
+  const next = state.page + delta;
+  if (next < 0) return;
+  sounds.tick();
+  const games = await state.feed.page(next);
+  if (!games.length) return;        // nothing older to show
+  state.page = next; state.games = games;
+  paper.drawGameList(games, { page: next, hasMore: state.feed.hasMore(next) });
+}
+
 /* ─────────────────── pick game → analyze ───────────────── */
 
 async function pickGame(i) {
   const game = state.games[i];
   if (!game) return;
   state.game = game;
-  setPhase('ANALYZING');
   sounds.tick();
+  setPhase('CHOOSE_MODE');
+  speak(`A game against <span class="q">${escapeText(game.opponent)}</span>. How shall we look at it?`);
+  $('mode-overlay').hidden = false;
+}
+
+$('btn-mode-back').addEventListener('click', () => {
+  $('mode-overlay').hidden = true;
+  setPhase('PICK_GAME');
+  speak('<span class="q">Pick</span> one, then.');
+});
+$('btn-mode-fix').addEventListener('click', () => { $('mode-overlay').hidden = true; startFixMistakes(); });
+$('btn-mode-review').addEventListener('click', () => { $('mode-overlay').hidden = true; startReview(); });
+
+async function startFixMistakes() {
+  const game = state.game;
+  setPhase('ANALYZING');
   await paper.slideOut();
   speak("Let me <span class=\"q\">study</span> it…");
   flareCandles();
@@ -210,11 +242,152 @@ async function pickGame(i) {
 async function backToGames(line) {
   setPhase('PICK_GAME');
   $('quiz-hud').hidden = true;
+  $('review-hud').hidden = true;
+  $('evalbar').hidden = true;
+  $('mode-overlay').hidden = true;
+  board.clearHighlights(); board.clearArrows();
   hush();
-  speak(line || `<span class="q">Pick</span> one to relive.`);
-  paper.drawGameList(state.games);
+  speak(line || `<span class="q">Pick</span> one.`);
+  paper.drawGameList(state.games, { page: state.page, hasMore: state.feed ? state.feed.hasMore(state.page) : false });
   host.leanIn(); await paper.slideIn(); await host.leanBack();
 }
+
+/* ──────────────────── simple review mode ───────────────── */
+// Step through a game move-by-move with the arrow keys; branch off at any point
+// by dragging a piece. The eval bar always reflects the position on the board.
+
+async function startReview() {
+  const game = state.game;
+  setPhase('REVIEW');
+  await paper.slideOut();
+  flareCandles();
+  const moves = parseGame(game.pgn).map((m) => ({ ...m, uci: m.from + m.to + (m.promotion || '') }));
+  state.rev = { moves, line: [], ply: 0, chess: new Chess(START_FEN), branched: false, userColor: game.userColor };
+  board.setOrientation(game.userColor);
+  board.setPosition(START_FEN);
+  board.clearHighlights(); board.clearArrows();
+  $('review-hud').hidden = false;
+  $('evalbar').hidden = false;
+  host.leanBack();
+  speak('Step through with the <span class="q">arrows</span>. Or move a piece to try your own line.');
+  updateReviewHud();
+  evalCurrent();
+}
+
+function recordMove(made, fen) {
+  return {
+    san: made.san, from: made.from, to: made.to,
+    promotion: made.promotion, uci: made.from + made.to + (made.promotion || ''),
+    fen, captured: made.captured,
+  };
+}
+
+function reviewForward() {
+  const r = state.rev; if (!r) return;
+  if (r.ply < r.line.length) {
+    const rec = r.line[r.ply];
+    r.chess.move({ from: rec.from, to: rec.to, promotion: rec.promotion });
+    r.ply++;
+  } else {
+    if (r.branched) return;             // off the recorded line — nothing ahead
+    const mv = r.moves[r.ply];
+    if (!mv) return;                    // end of the game
+    const made = r.chess.move({ from: mv.from, to: mv.to, promotion: mv.promotion });
+    r.line.push(recordMove(made, r.chess.fen()));
+    r.ply++;
+  }
+  sounds.move();
+  applyReviewPly();
+}
+
+function reviewBack() {
+  const r = state.rev; if (!r || r.ply === 0) return;
+  r.chess.undo(); r.ply--;
+  sounds.tick();
+  applyReviewPly();
+}
+
+async function reviewPlayMove({ from, to, promotion }) {
+  const r = state.rev; if (!r) return;
+  const legal = r.chess.moves({ square: from, verbose: true }).filter((mv) => mv.to === to);
+  if (!legal.length) return;
+  if (legal[0].promotion && !promotion) {
+    promotion = await askPromotion(r.userColor);
+    if (!promotion) { board.clearSelection(); return; }
+  }
+  if (r.ply < r.line.length) r.line.length = r.ply;   // overwrite any "redo" future
+  const made = r.chess.move({ from, to, promotion });
+  made.captured ? sounds.capture() : sounds.move();
+  await board.move(from, to, promotion);
+  r.line.push(recordMove(made, r.chess.fen()));
+  r.ply++;
+  applyReviewPly();
+}
+
+function applyReviewPly() {
+  const r = state.rev;
+  const last = r.ply > 0 ? r.line[r.ply - 1] : null;
+  board.setPosition(last ? last.fen : START_FEN);
+  board.clearHighlights(); board.clearArrows();
+  if (last) { board.highlight(last.from, 'last-from'); board.highlight(last.to, 'last-to'); }
+  if (r.chess.inCheck()) { const k = findKing(r.chess, r.chess.turn()); if (k) board.highlight(k, 'check'); }
+  r.branched = r.line.some((rec, i) => !r.moves[i] || r.moves[i].uci !== rec.uci);
+  updateReviewHud();
+  evalCurrent();
+}
+
+function updateReviewHud() {
+  const r = state.rev;
+  const last = r.ply > 0 ? r.line[r.ply - 1] : null;
+  const moveEl = $('rev-move');
+  if (!last) moveEl.innerHTML = '<span class="dim">starting position</span>';
+  else {
+    const n = Math.floor((r.ply - 1) / 2) + 1;
+    const sep = (r.ply % 2 === 1) ? '.' : '…';
+    moveEl.innerHTML = `<b>${n}${sep} ${escapeText(last.san)}</b>` +
+      (r.branched ? ' <span class="branch-tag">your line</span>' : '');
+  }
+  // a compact running move list with the current half-move marked
+  const parts = [];
+  for (let i = 0; i < r.line.length; i++) {
+    if (i % 2 === 0) parts.push(`<span class="ml-no">${i / 2 + 1}.</span>`);
+    const onMain = r.moves[i] && r.moves[i].uci === r.line[i].uci;
+    const cls = (i === r.ply - 1 ? 'ml-cur ' : '') + (onMain ? '' : 'ml-branch');
+    parts.push(`<span class="${cls}">${escapeText(r.line[i].san)}</span>`);
+  }
+  $('rev-line').innerHTML = parts.join(' ') || '<span class="dim">— no moves yet —</span>';
+}
+
+function winProb(scoreCp) {
+  return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * scoreCp)) - 1);
+}
+
+function setEvalBar(score, mateIn) {
+  const whiteWin = Math.max(0, Math.min(100, winProb(score)));
+  $('eb-fill').style.height = whiteWin + '%';
+  const num = $('eb-num');
+  num.textContent = formatEval(score, mateIn, 'w');
+  // keep the readout next to whichever side is winning
+  num.classList.toggle('low', whiteWin < 50);
+}
+
+async function evalCurrent() {
+  const r = state.rev; if (!r) return;
+  const my = ++state.evalSession;
+  if (r.chess.isGameOver()) {
+    if (r.chess.isCheckmate()) setEvalBar(r.chess.turn() === 'b' ? 9999 : -9999, null);
+    else setEvalBar(0, null);
+    return;
+  }
+  $('eb-num').textContent = '…';
+  let ev;
+  try { await state.engine.init(); ev = await state.engine.evaluate(r.chess.fen(), { depth: 12, movetime: 700 }); }
+  catch { return; }
+  if (my !== state.evalSession || state.phase !== 'REVIEW') return;   // superseded
+  setEvalBar(ev.score, ev.mateIn);
+}
+
+$('btn-rev-exit').addEventListener('click', () => { state.rev = null; state.evalSession++; backToGames(); });
 
 /* ────────────────────────── quiz ───────────────────────── */
 
@@ -518,6 +691,11 @@ $('btn-accept').addEventListener('click', () => {
 $('btn-next').addEventListener('click', () => { state.session++; nextPuzzle(); });
 
 document.addEventListener('keydown', (e) => {
+  if (state.phase === 'REVIEW') {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); reviewBack(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); reviewForward(); }
+    return;
+  }
   if (state.phase !== 'QUIZ') return;
   if (state.playing) { state.skipPlayback = true; return; }
   if (!state.quiz) return;
@@ -551,7 +729,18 @@ window.__rmc = {
   get orientation() { return board.orientation; },
   flip() { board.flip(); },
   submitUsername(name) { return doFetch(name); },
+  changePage(d) { return changePage(d); },
   pickGame(i) { return pickGame(i); },
+  chooseMode(mode) { $('mode-overlay').hidden = true; return mode === 'review' ? startReview() : startFixMistakes(); },
+  reviewForward() { reviewForward(); },
+  reviewBack() { reviewBack(); },
+  reviewMove(from, to, promo) { return reviewPlayMove({ from, to, promotion: promo }); },
+  get review() {
+    const r = state.rev;
+    return r ? { ply: r.ply, lineLen: r.line.length, branched: r.branched, san: r.ply > 0 ? r.line[r.ply - 1].san : null, fen: r.chess.fen() } : null;
+  },
+  get evalNum() { return $('eb-num').textContent; },
+  get evalFill() { return $('eb-fill').style.height; },
   squareToClient(sq) { return board.squareCenter(sq, 0); },
   playMove(from, to, promo) { return handleUserMove({ from, to, promotion: promo }); },
   reveal() { return doReveal(); },

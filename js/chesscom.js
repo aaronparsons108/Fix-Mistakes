@@ -23,6 +23,30 @@ export async function fetchPlayer(username) {
   return getJSON(`${API}/player/${encodeURIComponent(username.toLowerCase())}`);
 }
 
+// A lazily-paginated feed of the player's recent games (any result), newest
+// first. .page(p) fetches just enough archives to return that page of `size`.
+export async function openGameFeed(username, { size = 5 } = {}) {
+  const user = username.toLowerCase();
+  const { archives } = await getJSON(`${API}/player/${encodeURIComponent(user)}/games/archives`);
+  const months = (archives || []).slice().reverse(); // newest month first
+  let mi = 0;
+  const buffer = [];
+  async function fillTo(n) {
+    while (buffer.length < n && mi < months.length) {
+      const { games } = await getJSON(months[mi++]);
+      for (const g of (games || []).slice().reverse()) {
+        const nm = normalizeGame(g, user);
+        if (nm) buffer.push(nm);
+      }
+    }
+  }
+  return {
+    size,
+    async page(p) { await fillTo((p + 1) * size + 1); return buffer.slice(p * size, p * size + size); },
+    hasMore(p) { return buffer.length > (p + 1) * size || mi < months.length; },
+  };
+}
+
 // Fetch the player's recent losses (standard chess only), newest first.
 export async function fetchLostGames(username, { maxGames = 24, maxArchives = 6 } = {}) {
   const user = username.toLowerCase();
@@ -61,5 +85,6 @@ function normalizeGame(g, user) {
     opponentRating: opp.rating,
     resultReason: REASON_LABEL[me.result] || me.result,
     isLoss: LOSS_RESULTS.has(me.result),
+    result: me.result === 'win' ? 'won' : LOSS_RESULTS.has(me.result) ? 'lost' : 'draw',
   };
 }

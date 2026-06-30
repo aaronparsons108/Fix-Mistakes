@@ -75,8 +75,11 @@ try {
   check(true, 'host fetches games and offers the paper (PICK_GAME)');
   await page.screenshot({ path: SHOTS + 'cabin-2-games.png' });
 
-  // pick the game -> Stockfish analysis -> quiz
+  // pick the game -> mode picker -> Fix Mistakes -> analysis -> quiz
   await page.evaluate(() => window.__rmc.pickGame(0));
+  await page.waitForFunction(() => window.__rmc.state === 'CHOOSE_MODE', { timeout: 15000 });
+  check(true, 'picking a game offers the two modes (CHOOSE_MODE)');
+  await page.evaluate(() => window.__rmc.chooseMode('fix'));
   await page.waitForFunction(() => window.__rmc.state === 'QUIZ', { timeout: 120000 });
   check(true, 'analysis completes and the quiz begins (QUIZ)');
   const total = await page.evaluate(() => window.__rmc.results.length);
@@ -129,6 +132,36 @@ try {
   check(true, 'finishing a game returns to the games paper (no verdict screen)');
   await page.waitForTimeout(300);
   await page.screenshot({ path: SHOTS + 'cabin-6-done.png' });
+
+  // ── Simple Review mode ──────────────────────────────────────────
+  await page.evaluate(() => window.__rmc.pickGame(0));
+  await page.waitForFunction(() => window.__rmc.state === 'CHOOSE_MODE', { timeout: 15000 });
+  await page.evaluate(() => window.__rmc.chooseMode('review'));
+  await page.waitForFunction(() => window.__rmc.state === 'REVIEW', { timeout: 15000 });
+  check(true, 'Simple Review mode opens (REVIEW)');
+
+  // step forward along the main line
+  await page.evaluate(() => { window.__rmc.reviewForward(); window.__rmc.reviewForward(); window.__rmc.reviewForward(); });
+  await page.waitForTimeout(100);
+  check(await page.evaluate(() => window.__rmc.review.ply === 3), 'arrow-forward walks the main line');
+  check(await page.evaluate(() => window.__rmc.review.san === 'Nf3'), 'the move annotation tracks the current move');
+  // the eval bar should have produced a real number for this position
+  await page.waitForFunction(() => /[-+0-9M]/.test(window.__rmc.evalNum) && window.__rmc.evalNum !== '…', { timeout: 15000 });
+  check(true, 'the eval bar evaluates the current position');
+  await page.screenshot({ path: SHOTS + 'cabin-7-review.png' });
+
+  // step back
+  await page.evaluate(() => window.__rmc.reviewBack());
+  check(await page.evaluate(() => window.__rmc.review.ply === 2), 'arrow-back steps backward');
+
+  // branch off with a different move (1.e4 e5 2.Nc3 instead of 2.Nf3)
+  await page.evaluate(() => window.__rmc.reviewMove('b1', 'c3'));
+  await page.waitForTimeout(100);
+  check(await page.evaluate(() => window.__rmc.review.branched && window.__rmc.review.san === 'Nc3'), 'playing a different move branches into your own line');
+
+  await page.evaluate(() => document.getElementById('btn-rev-exit').click());
+  await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
+  check(true, 'leaving review returns to the games paper');
 
   await browser.close();
 } catch (e) {

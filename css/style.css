@@ -203,6 +203,42 @@ body {
   box-shadow: 0 10px 34px rgba(0,0,0,0.6);
 }
 
+/* ── mode picker ─────────────────────────────────────── */
+.mode-card { padding: 26px 30px 22px; text-align: center; max-width: 440px; }
+.mode-card p { font-style: italic; font-size: 22px; margin-bottom: 18px; color: #3a2c1d; }
+.mode-choices { display: flex; flex-direction: column; gap: 12px; }
+.mode-choices .ink-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 14px; font-size: 17px; }
+.ink-btn small { font-family: 'Fell', serif; font-size: 13px; opacity: 0.85; font-style: italic; letter-spacing: 0; text-transform: none; }
+.link-btn { background: none; border: none; color: #7a5a34; font-family: 'Typewriter', monospace; font-size: 13px; cursor: pointer; margin-top: 14px; }
+.link-btn:hover { color: #c08030; text-decoration: underline; }
+
+/* ── simple-review HUD ───────────────────────────────── */
+#review-hud {
+  left: 50%; bottom: 16px; transform: translateX(-50%);
+  width: min(540px, 94vw); padding: 12px 20px 14px; text-align: center;
+}
+.rev-move { font-family: 'Typewriter', monospace; font-size: 22px; color: #2c2114; min-height: 28px; letter-spacing: 1px; }
+.rev-move .num { color: #7a5a34; }
+.rev-move .dim { color: #8a754a; font-style: italic; font-family: 'Fell', serif; font-size: 17px; letter-spacing: 0; }
+.rev-line { font-family: 'Fell', serif; font-style: italic; font-size: 14px; color: #6a5430; min-height: 18px; margin-top: 2px; line-height: 1.5; }
+.rev-line .ml-no { color: #9a8454; font-style: normal; }
+.rev-line .ml-cur { background: #d8b66a; color: #2c2114; border-radius: 3px; padding: 0 3px; font-style: normal; }
+.rev-line .ml-branch { color: #9a4a2a; }
+.branch-tag { font-family: 'Fell', serif; font-style: italic; font-size: 13px; color: #fff; background: #9a4a2a; border-radius: 3px; padding: 1px 7px; letter-spacing: 0; vertical-align: middle; }
+#review-hud .link-btn { position: absolute; top: 8px; right: 12px; margin: 0; }
+
+/* ── vertical eval bar ───────────────────────────────── */
+.evalbar {
+  position: fixed; left: 20px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: min(56vh, 460px); z-index: 30;
+  background: #17171a; border: 1px solid #54545c; border-radius: 5px; overflow: hidden;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+}
+.eb-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: linear-gradient(#f2ecda, #cfc8b0); transition: height .5s cubic-bezier(.2,.9,.3,1); }
+.eb-zero { position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: rgba(214,31,31,0.6); }
+.eb-num { position: absolute; left: 50%; bottom: -22px; transform: translateX(-50%); font-family: 'Typewriter', monospace; font-size: 12px; color: #e8dcc0; white-space: nowrap; }
+.eb-num.low { bottom: auto; top: -22px; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; }
 }

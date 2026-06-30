@@ -76,28 +76,42 @@ export class Paper {
     x.textAlign = 'left';
   }
 
-  drawGameList(games) {
-    this._bg(); this._title('Your recent defeats');
+  // games: the 5 (or fewer) games on this page; opts: { page, hasMore }
+  drawGameList(games, { page = 0, hasMore = false } = {}) {
+    this._bg(); this._title('Your recent games');
     const x = this.ctx; this.lineBoxes = [];
-    const items = games.slice(0, 6);   // leave the bottom margin clear for the hand
+    const items = games.slice(0, 5);   // 5 per page; bottom margin holds nav + hand
+    const RESULT_COLOR = { won: '#3f6a2a', lost: '#7a2618', draw: '#6a5638' };
     items.forEach((g, i) => {
       const y = 142 + i * 68;
-      this.lineBoxes.push({ y0: y - 30, y1: y + 34, index: i });
+      this.lineBoxes.push({ y0: y - 30, y1: y + 34, type: 'game', index: i });
       x.fillStyle = i % 2 ? 'rgba(120,90,50,0.08)' : 'rgba(120,90,50,0.03)';
       x.fillRect(34, y - 30, CW - 68, 62);
       x.fillStyle = '#2c2114'; x.font = "29px 'IM Fell English', Georgia, serif";
       x.fillText(`vs ${g.opponent}`, 50, y);
-      x.fillStyle = '#7a2618'; x.font = "19px 'Special Elite', monospace";
-      x.fillText(`${g.resultReason}`, 50, y + 24);
+      x.fillStyle = RESULT_COLOR[g.result] || '#7a2618'; x.font = "19px 'Special Elite', monospace";
+      x.fillText(`${g.result} · ${g.resultReason}`, 50, y + 24);
       x.fillStyle = '#6a5638'; x.textAlign = 'right';
       x.font = "19px 'Special Elite', monospace";
       x.fillText(`${g.opponentRating ?? '?'} · ${g.timeClass}`, CW - 50, y);
       x.fillText(g.userColor === 'w' ? 'you: white' : 'you: black', CW - 50, y + 24);
       x.textAlign = 'left';
     });
+
+    // pager row: ‹ newer    page N    older ›
+    const ny = 142 + 5 * 68 + 14;
+    x.font = "22px 'Special Elite', monospace"; x.textBaseline = 'middle';
+    if (page > 0) {
+      this.lineBoxes.push({ y0: ny - 22, y1: ny + 22, x0: 34, x1: 200, type: 'prev' });
+      x.fillStyle = '#3a2c1d'; x.textAlign = 'left'; x.fillText('‹ newer', 50, ny);
+    }
+    if (hasMore) {
+      this.lineBoxes.push({ y0: ny - 22, y1: ny + 22, x0: CW - 200, x1: CW - 34, type: 'next' });
+      x.fillStyle = '#3a2c1d'; x.textAlign = 'right'; x.fillText('older ›', CW - 50, ny);
+    }
     x.fillStyle = '#6a5638'; x.font = "italic 18px 'IM Fell English', serif"; x.textAlign = 'center';
-    x.fillText('— click one to relive it —', CW / 2, 142 + items.length * 68 + 8);
-    x.textAlign = 'left';
+    x.fillText(`— click a game · page ${page + 1} —`, CW / 2, ny + 36);
+    x.textAlign = 'left'; x.textBaseline = 'alphabetic';
     this.tex.needsUpdate = true;
   }
 
@@ -116,16 +130,19 @@ export class Paper {
   // World position of the gripping hand (for the host's reaching arm).
   handWorld() { return this.mesh.localToWorld(new THREE.Vector3(0, -1.62, -0.15)); }
 
-  // Returns the picked game index, or -1.
+  // Returns the picked region: { type:'game', index } | { type:'next' } |
+  // { type:'prev' }, or null if nothing was hit.
   pick(clientX, clientY) {
-    if (this.hidden) return -1;
+    if (this.hidden) return null;
     const ray = new THREE.Raycaster();
     const ndc = new THREE.Vector2((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
     ray.setFromCamera(ndc, this.camera);
     const hit = ray.intersectObject(this.mesh)[0];
-    if (!hit || !hit.uv) return -1;
-    const py = (1 - hit.uv.y) * CH;
-    const box = this.lineBoxes.find((b) => py >= b.y0 && py <= b.y1);
-    return box ? box.index : -1;
+    if (!hit || !hit.uv) return null;
+    const px = hit.uv.x * CW, py = (1 - hit.uv.y) * CH;
+    const box = this.lineBoxes.find((b) =>
+      py >= b.y0 && py <= b.y1 && (b.x0 === undefined || (px >= b.x0 && px <= b.x1)));
+    if (!box) return null;
+    return box.type === 'game' ? { type: 'game', index: box.index } : { type: box.type };
   }
 }
