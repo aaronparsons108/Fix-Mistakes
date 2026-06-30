@@ -42,15 +42,15 @@ export class Board3D {
   /* ── geometry ───────────────────────────────────────── */
   _buildBoard() {
     const plinth = new THREE.Mesh(
-      new THREE.BoxGeometry(9.2, 0.4, 9.2),
-      new THREE.MeshStandardMaterial({ color: 0x35271c, roughness: 0.8 })
+      new THREE.BoxGeometry(9.2, 0.5, 9.2),
+      new THREE.MeshStandardMaterial({ color: 0x2c2016, roughness: 0.55, metalness: 0.2 })
     );
-    plinth.position.y = -0.2; plinth.receiveShadow = true; plinth.castShadow = true;
+    plinth.position.y = -0.25; plinth.receiveShadow = true; plinth.castShadow = true;
     this.group.add(plinth);
 
     const surface = new THREE.Mesh(
       new THREE.PlaneGeometry(8, 8),
-      new THREE.MeshStandardMaterial({ map: this._boardTexture(), roughness: 0.82 })
+      new THREE.MeshStandardMaterial({ map: this._boardTexture(), roughness: 0.5, metalness: 0.18 })
     );
     surface.rotation.x = -Math.PI / 2; surface.position.y = 0.001; surface.receiveShadow = true;
     this.group.add(surface);

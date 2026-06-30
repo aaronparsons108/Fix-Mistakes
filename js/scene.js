@@ -5,8 +5,8 @@
 import * as THREE from '../lib/three/three.module.js';
 
 export const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x06070d);
-scene.fog = new THREE.FogExp2(0x0a0c14, 0.03);
+scene.background = new THREE.Color(0x09090b);
+scene.fog = new THREE.FogExp2(0x0c0c0f, 0.028);
 
 export const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 camera.position.set(0, 9.4, 9.2);   // pulled back + up so the whole board fits, host still looms across it
@@ -73,19 +73,41 @@ function buildRoom() {
   floor.rotation.x = -Math.PI / 2; floor.position.y = -4.5; floor.receiveShadow = true;
   scene.add(floor);
 
-  // a round wooden table the board rests on — fits the round tower and keeps
-  // its edge clear of the walls/window (no big square slab clipping things)
-  const tableWood = new THREE.MeshStandardMaterial({ color: 0x5a3a1f, roughness: 0.7, metalness: 0 });
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(7.0, 6.9, 0.55, 56), tableWood);
-  top.position.set(0, -0.275, -1.0); top.receiveShadow = true; top.castShadow = true;
-  scene.add(top);
-  const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.5, 4.2, 28), tableWood);
-  ped.position.set(0, -2.6, -1.0); ped.castShadow = true; scene.add(ped);
-  const foot = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.9, 0.4, 28), tableWood);
-  foot.position.set(0, -4.45, -1.0); foot.receiveShadow = true; scene.add(foot);
-
+  // no table — the board floats; the host stands behind it on the floor
   buildWindow();
+  buildGodRay();
+  buildTorches();
   buildMotes();
+}
+
+// a soft shaft of moonlight slanting in from the window
+function buildGodRay() {
+  const W = new THREE.Vector3(-9.5, 2.6, -12.5), F = new THREE.Vector3(-2.5, -4.4, -3.5);
+  const len = W.distanceTo(F);
+  const ray = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 3.4, len, 24, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xbed2ff, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })
+  );
+  ray.position.copy(W.clone().add(F).multiplyScalar(0.5));
+  ray.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), W.clone().sub(F).normalize());
+  ray.renderOrder = 2;
+  scene.add(ray);
+}
+
+// flickering wall torches for tower atmosphere
+const torchFlames = [], torchLights = [];
+function buildTorches() {
+  const flameMat = () => new THREE.MeshBasicMaterial({ color: 0xffb24a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  const bracketMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.7, metalness: 0.5 });
+  for (const x of [-12.5, 12.5]) {
+    const z = -3, y = 2.2;
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.1, 8), bracketMat);
+    stick.position.set(x, y, z); stick.rotation.z = x < 0 ? -0.5 : 0.5; scene.add(stick);
+    const flame = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 1.0), flameMat());
+    flame.position.set(x + (x < 0 ? 0.5 : -0.5), y + 0.7, z); scene.add(flame); torchFlames.push(flame);
+    const light = new THREE.PointLight(0xff9a3c, 14, 12, 2.0);
+    light.position.set(x + (x < 0 ? 0.9 : -0.9), y + 0.7, z); scene.add(light); torchLights.push(light);
+  }
 }
 
 // slow dust motes drifting through the lamplight
@@ -140,7 +162,7 @@ function buildWindow() {
   const moon = new THREE.PointLight(0xaecbff, 70, 46, 1.8);
   moon.position.set(-6.5, 5.5, -7.0);
   scene.add(moon);
-  scene.add(new THREE.HemisphereLight(0x3a4a72, 0x0a0c14, 0.3)); // faint moonlit fill
+  scene.add(new THREE.HemisphereLight(0x2a2e38, 0x0c0c0f, 0.22)); // faint neutral fill
 }
 
 function brickTexture() {
@@ -272,6 +294,13 @@ function flicker(t) {
   bulbMesh.position.x = sx; bulbMesh.position.z = LZ + sz;
   shadeMesh.position.x = sx; shadeMesh.position.z = LZ + sz;
   lamp.intensity = lampBaseIntensity * (1 + 0.025 * Math.sin(t * 5.0));
+  // torches flicker + face the camera
+  for (let i = 0; i < torchFlames.length; i++) {
+    const f = 1 + 0.18 * Math.sin(t * 13 + i * 2) + 0.1 * Math.sin(t * 27 + i);
+    torchFlames[i].lookAt(camera.position);
+    torchFlames[i].scale.set(0.9 + 0.15 * Math.sin(t * 19 + i), f, 1);
+    torchLights[i].intensity = 14 * f;
+  }
 }
 
 // Briefly brighten the room (used at dramatic beats).

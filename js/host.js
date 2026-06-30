@@ -14,11 +14,10 @@ const PAWN = [V(0.30, 0), V(0.31, 0.05), V(0.20, 0.11), V(0.13, 0.24), V(0.19, 0
 export class Host {
   constructor(scene) {
     this.group = new THREE.Group();
-    // human-sized giant standing behind the table — only the top half clears
-    // the board's far edge, so he looms over the position
-    this.group.position.set(0, -1.7, -6.0);
-    this.group.scale.setScalar(2.4);
-    this.baseY = -1.7;
+    // a giant standing on the floor behind the floating board, looming over it
+    this.group.position.set(0, -4.5, -6.8);
+    this.group.scale.setScalar(3.0);
+    this.baseY = -4.5;
     this.mood = 0;          // -1 droop … +1 perky
     this.lean = 0;
     this.blink = 0;         // 0 open, 1 shut
@@ -132,12 +131,14 @@ export class Host {
   }
 
   update(t, dt) {
-    // bob + sway, modulated by mood
-    const amp = 0.045 + (this.mood > 0 ? 0.02 * this.mood : 0);
+    // bob + sway + slow breathing, modulated by mood
+    const amp = 0.06 + (this.mood > 0 ? 0.03 * this.mood : 0);
     this.group.position.y = this.baseY + Math.sin(t * 1.1) * amp + (this._popY || 0);
     this.group.position.x = (this._shakeX || 0);
     this.group.rotation.z = Math.sin(t * 0.7) * 0.02;
     this.group.rotation.x = this.lean + (this.mood < 0 ? 0.08 : 0);
+    const breathe = 3.0 * (1 + Math.sin(t * 1.5) * 0.012);
+    this.group.scale.set(breathe, 3.0 * (1 + Math.sin(t * 1.5 + 0.4) * 0.018), breathe);
 
     // blink: the dome lid grows over the full eye, then retracts; hidden when open
     if (t > this.nextBlink && this.blink === 0) { this.blink = 0.0001; this._blinkDir = 1; }

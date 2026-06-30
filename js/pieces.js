@@ -7,8 +7,9 @@
 import * as THREE from '../lib/three/three.module.js';
 import { GLTFLoader } from '../lib/three/addons/loaders/GLTFLoader.js';
 
-export const matBone = new THREE.MeshStandardMaterial({ color: 0xe7dcc4, roughness: 0.5, metalness: 0.0 });
-export const matDark = new THREE.MeshStandardMaterial({ color: 0x2a211b, roughness: 0.45, metalness: 0.05 });
+// warm polished ivory and a richer walnut that still reads in the dark
+export const matBone = new THREE.MeshStandardMaterial({ color: 0xece1c8, roughness: 0.38, metalness: 0.04, emissive: 0x140f06, emissiveIntensity: 0.15 });
+export const matDark = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.4, metalness: 0.12, emissive: 0x0c0805, emissiveIntensity: 0.3 });
 
 const FILE = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
 const TARGET_H = { p: 0.80, n: 0.86, b: 1.0, r: 0.84, q: 1.12, k: 1.28 };
