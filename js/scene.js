@@ -149,20 +149,19 @@ function buildWindow() {
   const g = new THREE.Group();
   g.position.set(wx, wy, wz);
   g.lookAt(2, 1.2, 9.2);   // face the camera so the moon reads
-  // a wide stone surround so only a small opening shows sky
-  const stone = new THREE.MeshStandardMaterial({ map: brickTexture(), color: 0x6a6a72, roughness: 0.95 });
-  const surround = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 8.5), stone);
-  surround.position.z = -0.1; g.add(surround);
-  const reveal = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 4.6), new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 1 }));
-  reveal.position.z = -0.05; g.add(reveal);
+  // the brick wall sits right behind the window, so just a thin stone frame
+  // around the opening — no big surround plane (that read as a black box)
+  const stone = new THREE.MeshStandardMaterial({ color: 0x55555c, roughness: 0.95 });
+  const frame = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 4.8), stone);
+  frame.position.z = -0.1; g.add(frame);
   const sky = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.8, 4.2),
+    new THREE.PlaneGeometry(2.9, 4.3),
     new THREE.MeshBasicMaterial({ map: nightSkyTexture(), toneMapped: false })
   );
   g.add(sky);
   const barMat = new THREE.MeshStandardMaterial({ color: 0x16161a, roughness: 0.9 });
-  const vbar = new THREE.Mesh(new THREE.BoxGeometry(0.14, 4.2, 0.16), barMat); vbar.position.z = 0.06; g.add(vbar);
-  const hbar = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.14, 0.16), barMat); hbar.position.z = 0.06; g.add(hbar);
+  const vbar = new THREE.Mesh(new THREE.BoxGeometry(0.13, 4.3, 0.16), barMat); vbar.position.z = 0.06; g.add(vbar);
+  const hbar = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.13, 0.16), barMat); hbar.position.z = 0.06; g.add(hbar);
   scene.add(g);
 
   // cold moonlight spilling in from the window (softer, less blue wash)
