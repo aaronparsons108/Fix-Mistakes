@@ -14,9 +14,11 @@ const PAWN = [V(0.30, 0), V(0.31, 0.05), V(0.20, 0.11), V(0.13, 0.24), V(0.19, 0
 export class Host {
   constructor(scene) {
     this.group = new THREE.Group();
-    this.group.position.set(0, 0, -5.1);
-    this.group.scale.setScalar(1.3);   // loom larger over the far edge of the board
-    this.baseY = 0;
+    // human-sized giant standing behind the table — only the top half clears
+    // the board's far edge, so he looms over the position
+    this.group.position.set(0, -1.7, -6.0);
+    this.group.scale.setScalar(2.4);
+    this.baseY = -1.7;
     this.mood = 0;          // -1 droop … +1 perky
     this.lean = 0;
     this.blink = 0;         // 0 open, 1 shut

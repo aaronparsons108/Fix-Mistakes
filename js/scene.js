@@ -5,8 +5,8 @@
 import * as THREE from '../lib/three/three.module.js';
 
 export const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x070504);
-scene.fog = new THREE.FogExp2(0x0a0705, 0.045);
+scene.background = new THREE.Color(0x06070d);
+scene.fog = new THREE.FogExp2(0x0a0c14, 0.03);
 
 export const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 camera.position.set(0, 9.4, 9.2);   // pulled back + up so the whole board fits, host still looms across it
@@ -54,31 +54,116 @@ export function resize() {
   scaleVignette();
 }
 
-/* ── room & table ─────────────────────────────────────── */
+/* ── room & table: the inside of a grey brick tower ──── */
 function buildRoom() {
-  const wood = new THREE.MeshStandardMaterial({ color: 0x3a2616, roughness: 0.9, metalness: 0 });
-  const wallWood = new THREE.MeshStandardMaterial({ color: 0x1d130b, roughness: 0.96, metalness: 0 });
-  const tableWood = new THREE.MeshStandardMaterial({ color: 0x4a2f1a, roughness: 0.72, metalness: 0, map: plankTexture() });
+  // round tower wall (inside-facing)
+  const wall = new THREE.Mesh(
+    new THREE.CylinderGeometry(18, 18, 30, 56, 1, true),
+    new THREE.MeshStandardMaterial({ map: brickTexture(), roughness: 0.97, metalness: 0, side: THREE.BackSide })
+  );
+  wall.position.set(0, 7, -1); wall.receiveShadow = true;
+  scene.add(wall);
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(48, 48), wood);
+  // flagstone floor
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(44, 44),
+    new THREE.MeshStandardMaterial({ map: stoneTexture(), roughness: 0.95, metalness: 0 })
+  );
   floor.rotation.x = -Math.PI / 2; floor.position.y = -4.5; floor.receiveShadow = true;
   scene.add(floor);
 
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(28, 20), wallWood);
-  back.position.set(0, 5.5, -15); scene.add(back);
-  const left = new THREE.Mesh(new THREE.PlaneGeometry(30, 20), wallWood);
-  left.rotation.y = Math.PI / 2; left.position.set(-15, 5.5, -1); scene.add(left);
-  const right = left.clone(); right.rotation.y = -Math.PI / 2; right.position.set(15, 5.5, -1); scene.add(right);
-
+  // wooden table the board rests on
+  const tableWood = new THREE.MeshStandardMaterial({ color: 0x4a2f1a, roughness: 0.72, metalness: 0, map: plankTexture() });
   const top = new THREE.Mesh(new THREE.BoxGeometry(17, 0.6, 15), tableWood);
   top.position.set(0, -0.3, -1.0); top.receiveShadow = true; top.castShadow = true;
   scene.add(top);
-
   const legGeo = new THREE.BoxGeometry(0.7, 4.2, 0.7);
   for (const [lx, lz] of [[-6.8, 3], [6.8, 3], [-6.8, -5], [6.8, -5]]) {
     const leg = new THREE.Mesh(legGeo, tableWood);
     leg.position.set(lx, -2.5, lz); leg.castShadow = true; scene.add(leg);
   }
+
+  buildWindow();
+}
+
+// a tall arched window with a full moon in a dark sky, off to the left
+function buildWindow() {
+  const wy = 2.6, wx = -9.5, wz = -12.5;
+  const g = new THREE.Group();
+  g.position.set(wx, wy, wz);
+  g.lookAt(2, 1.5, 9.2);   // face the camera so the moon reads
+  const stone = new THREE.MeshStandardMaterial({ color: 0x3a3a42, roughness: 0.95 });
+  const frame = new THREE.Mesh(new THREE.PlaneGeometry(8.2, 11.4), stone);
+  frame.position.z = -0.08; g.add(frame);
+  const sky = new THREE.Mesh(
+    new THREE.PlaneGeometry(6.6, 10),
+    new THREE.MeshBasicMaterial({ map: nightSkyTexture(), toneMapped: false })
+  );
+  g.add(sky);
+  const barMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.9 });
+  const vbar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 10, 0.2), barMat); vbar.position.z = 0.08; g.add(vbar);
+  const hbar = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.2, 0.2), barMat); hbar.position.z = 0.08; g.add(hbar);
+  scene.add(g);
+
+  // cold moonlight spilling in from the window
+  const moon = new THREE.PointLight(0xaecbff, 70, 46, 1.8);
+  moon.position.set(-6.5, 5.5, -7.0);
+  scene.add(moon);
+  scene.add(new THREE.HemisphereLight(0x3a4a72, 0x0a0c14, 0.3)); // faint moonlit fill
+}
+
+function brickTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const x = c.getContext('2d');
+  x.fillStyle = '#34343a'; x.fillRect(0, 0, 512, 512); // mortar
+  const bw = 66, bh = 30, gap = 4;
+  for (let row = 0, y = 0; y < 512 + bh; row++, y += bh + gap) {
+    const off = (row % 2) * (bw / 2);
+    for (let bx = -bw; bx < 512; bx += bw + gap) {
+      const s = 86 + Math.floor(Math.random() * 38);
+      x.fillStyle = `rgb(${s},${s},${s + 7})`;
+      x.fillRect(bx + off, y, bw, bh);
+      x.globalAlpha = 0.08; x.fillStyle = '#000';
+      for (let k = 0; k < 4; k++) x.fillRect(bx + off + Math.random() * bw, y + Math.random() * bh, 7, 1);
+      x.globalAlpha = 1;
+    }
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(9, 5);
+  return t;
+}
+
+function stoneTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#3e3e44'; x.fillRect(0, 0, 256, 256);
+  x.strokeStyle = 'rgba(0,0,0,0.4)'; x.lineWidth = 3;
+  for (let i = 0; i <= 256; i += 64) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, 256); x.moveTo(0, i); x.lineTo(256, i); x.stroke(); }
+  for (let i = 0; i < 400; i++) { x.globalAlpha = 0.05; x.fillStyle = Math.random() > 0.5 ? '#000' : '#fff'; x.fillRect(Math.random() * 256, Math.random() * 256, 3, 3); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(8, 8);
+  return t;
+}
+
+function nightSkyTexture() {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 410;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 410);
+  g.addColorStop(0, '#0b1838'); g.addColorStop(1, '#04060e');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 410);
+  for (let i = 0; i < 70; i++) { x.fillStyle = `rgba(255,255,255,${0.25 + Math.random() * 0.6})`; const s = Math.random() * 1.7; x.fillRect(Math.random() * 256, Math.random() * 410, s, s); }
+  const mx = 168, my = 240, mr = 50;
+  const halo = x.createRadialGradient(mx, my, mr, mx, my, mr * 2.4);
+  halo.addColorStop(0, 'rgba(200,215,255,0.3)'); halo.addColorStop(1, 'rgba(200,215,255,0)');
+  x.fillStyle = halo; x.fillRect(0, 0, 256, 410);
+  const mg = x.createRadialGradient(mx - 12, my - 12, 4, mx, my, mr);
+  mg.addColorStop(0, '#ffffff'); mg.addColorStop(0.7, '#f3efdf'); mg.addColorStop(1, '#cdc6ae');
+  x.fillStyle = mg; x.beginPath(); x.arc(mx, my, mr, 0, 7); x.fill();
+  x.globalAlpha = 0.14; x.fillStyle = '#8f8a76';
+  for (let i = 0; i < 9; i++) { const a = Math.random() * 7, rr = Math.random() * mr * 0.72; x.beginPath(); x.arc(mx + Math.cos(a) * rr, my + Math.sin(a) * rr, 3 + Math.random() * 7, 0, 7); x.fill(); }
+  x.globalAlpha = 1;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 // Subtle vertical plank streaks for the tabletop.
