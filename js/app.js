@@ -186,9 +186,7 @@ async function pickGame(i) {
   flareCandles();
   try {
     await state.engine.init();
-    const { moments } = await analyzeGame(game, state.engine, {
-      onProgress: (d, t) => { if (state.phase === 'ANALYZING') speak(`Let me <span class="q">study</span> it… ${Math.round((d / t) * 100)}%`); },
-    });
+    const { moments } = await analyzeGame(game, state.engine);
     if (!moments.length) {
       speak('No real blunders here — you were just <span class="q">outplayed</span>. Pick another.');
       backToGames();

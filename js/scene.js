@@ -40,6 +40,7 @@ export function initScene(canvas, { headless = false } = {}) {
     const dt = clock.getDelta();
     const t = clock.elapsedTime;
     flicker(t);
+    driftMotes(t);
     for (const fn of tickers) fn(t, dt);
     renderer.render(scene, camera);
   });
@@ -72,18 +73,48 @@ function buildRoom() {
   floor.rotation.x = -Math.PI / 2; floor.position.y = -4.5; floor.receiveShadow = true;
   scene.add(floor);
 
-  // wooden table the board rests on
-  const tableWood = new THREE.MeshStandardMaterial({ color: 0x4a2f1a, roughness: 0.72, metalness: 0, map: plankTexture() });
-  const top = new THREE.Mesh(new THREE.BoxGeometry(17, 0.6, 15), tableWood);
-  top.position.set(0, -0.3, -1.0); top.receiveShadow = true; top.castShadow = true;
+  // a round wooden table the board rests on — fits the round tower and keeps
+  // its edge clear of the walls/window (no big square slab clipping things)
+  const tableWood = new THREE.MeshStandardMaterial({ color: 0x5a3a1f, roughness: 0.7, metalness: 0 });
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(7.0, 6.9, 0.55, 56), tableWood);
+  top.position.set(0, -0.275, -1.0); top.receiveShadow = true; top.castShadow = true;
   scene.add(top);
-  const legGeo = new THREE.BoxGeometry(0.7, 4.2, 0.7);
-  for (const [lx, lz] of [[-6.8, 3], [6.8, 3], [-6.8, -5], [6.8, -5]]) {
-    const leg = new THREE.Mesh(legGeo, tableWood);
-    leg.position.set(lx, -2.5, lz); leg.castShadow = true; scene.add(leg);
-  }
+  const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.5, 4.2, 28), tableWood);
+  ped.position.set(0, -2.6, -1.0); ped.castShadow = true; scene.add(ped);
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.9, 0.4, 28), tableWood);
+  foot.position.set(0, -4.45, -1.0); foot.receiveShadow = true; scene.add(foot);
 
   buildWindow();
+  buildMotes();
+}
+
+// slow dust motes drifting through the lamplight
+let motes;
+function buildMotes() {
+  const N = 150;
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    pos[i * 3] = (Math.random() - 0.5) * 13;
+    pos[i * 3 + 1] = Math.random() * 6.5;
+    pos[i * 3 + 2] = -1 + (Math.random() - 0.5) * 11;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  motes = new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0xffe6c0, size: 0.055, transparent: true, opacity: 0.32,
+    depthWrite: false, sizeAttenuation: true, blending: THREE.AdditiveBlending, toneMapped: false,
+  }));
+  scene.add(motes);
+}
+function driftMotes(t) {
+  if (!motes) return;
+  const p = motes.geometry.attributes.position.array;
+  for (let i = 0; i < p.length; i += 3) {
+    p[i] += Math.sin(t * 0.25 + i) * 0.0006;
+    p[i + 1] += 0.0035;
+    if (p[i + 1] > 6.5) p[i + 1] = 0;
+  }
+  motes.geometry.attributes.position.needsUpdate = true;
 }
 
 // a tall arched window with a full moon in a dark sky, off to the left
@@ -163,17 +194,6 @@ function nightSkyTexture() {
   for (let i = 0; i < 9; i++) { const a = Math.random() * 7, rr = Math.random() * mr * 0.72; x.beginPath(); x.arc(mx + Math.cos(a) * rr, my + Math.sin(a) * rr, 3 + Math.random() * 7, 0, 7); x.fill(); }
   x.globalAlpha = 1;
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-// Subtle vertical plank streaks for the tabletop.
-function plankTexture() {
-  const c = document.createElement('canvas'); c.width = c.height = 512;
-  const x = c.getContext('2d');
-  x.fillStyle = '#4a2f1a'; x.fillRect(0, 0, 512, 512);
-  for (let i = 0; i < 9; i++) { x.strokeStyle = 'rgba(0,0,0,0.35)'; x.lineWidth = 2; x.beginPath(); x.moveTo(i * 57, 0); x.lineTo(i * 57, 512); x.stroke(); }
-  for (let i = 0; i < 600; i++) { x.globalAlpha = 0.05; x.fillStyle = Math.random() > 0.5 ? '#2a1a0e' : '#6a4326'; x.fillRect(Math.random() * 512, Math.random() * 512, 18, 1); }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 2);
   return t;
 }
 
