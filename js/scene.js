@@ -40,7 +40,6 @@ export function initScene(canvas, { headless = false } = {}) {
     const dt = clock.getDelta();
     const t = clock.elapsedTime;
     flicker(t);
-    driftMotes(t);
     for (const fn of tickers) fn(t, dt);
     renderer.render(scene, camera);
   });
@@ -83,15 +82,14 @@ function buildRoom() {
   buildWindow();
   buildGodRay();
   buildTorches();
-  buildMotes();
 }
 
 // a soft shaft of moonlight slanting in from the window
 function buildGodRay() {
-  const W = new THREE.Vector3(-9.5, 2.6, -12.5), F = new THREE.Vector3(-2.5, -4.4, -3.5);
+  const W = new THREE.Vector3(-8.6, 2.4, -12.2), F = new THREE.Vector3(-2.5, -4.4, -3.5);
   const len = W.distanceTo(F);
   const ray = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.5, 3.4, len, 24, 1, true),
+    new THREE.CylinderGeometry(0.4, 2.6, len, 24, 1, true),
     new THREE.MeshBasicMaterial({ color: 0xbed2ff, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false })
   );
   ray.position.copy(W.clone().add(F).multiplyScalar(0.5));
@@ -147,28 +145,31 @@ function driftMotes(t) {
 
 // a tall arched window with a full moon in a dark sky, off to the left
 function buildWindow() {
-  const wy = 2.6, wx = -9.5, wz = -12.5;
+  const wy = 2.4, wx = -8.6, wz = -12.2;
   const g = new THREE.Group();
   g.position.set(wx, wy, wz);
-  g.lookAt(2, 1.5, 9.2);   // face the camera so the moon reads
-  const stone = new THREE.MeshStandardMaterial({ color: 0x3a3a42, roughness: 0.95 });
-  const frame = new THREE.Mesh(new THREE.PlaneGeometry(8.2, 11.4), stone);
-  frame.position.z = -0.08; g.add(frame);
+  g.lookAt(2, 1.2, 9.2);   // face the camera so the moon reads
+  // a wide stone surround so only a small opening shows sky
+  const stone = new THREE.MeshStandardMaterial({ map: brickTexture(), color: 0x6a6a72, roughness: 0.95 });
+  const surround = new THREE.Mesh(new THREE.PlaneGeometry(7.5, 8.5), stone);
+  surround.position.z = -0.1; g.add(surround);
+  const reveal = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 4.6), new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 1 }));
+  reveal.position.z = -0.05; g.add(reveal);
   const sky = new THREE.Mesh(
-    new THREE.PlaneGeometry(6.6, 10),
+    new THREE.PlaneGeometry(2.8, 4.2),
     new THREE.MeshBasicMaterial({ map: nightSkyTexture(), toneMapped: false })
   );
   g.add(sky);
-  const barMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.9 });
-  const vbar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 10, 0.2), barMat); vbar.position.z = 0.08; g.add(vbar);
-  const hbar = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.2, 0.2), barMat); hbar.position.z = 0.08; g.add(hbar);
+  const barMat = new THREE.MeshStandardMaterial({ color: 0x16161a, roughness: 0.9 });
+  const vbar = new THREE.Mesh(new THREE.BoxGeometry(0.14, 4.2, 0.16), barMat); vbar.position.z = 0.06; g.add(vbar);
+  const hbar = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.14, 0.16), barMat); hbar.position.z = 0.06; g.add(hbar);
   scene.add(g);
 
-  // cold moonlight spilling in from the window
-  const moon = new THREE.PointLight(0xaecbff, 70, 46, 1.8);
-  moon.position.set(-6.5, 5.5, -7.0);
+  // cold moonlight spilling in from the window (softer, less blue wash)
+  const moon = new THREE.PointLight(0xb8cdff, 36, 40, 2.0);
+  moon.position.set(-6.0, 4.5, -7.5);
   scene.add(moon);
-  scene.add(new THREE.HemisphereLight(0x2a2e38, 0x0c0c0f, 0.22)); // faint neutral fill
+  scene.add(new THREE.HemisphereLight(0x24262c, 0x0c0c0f, 0.18)); // faint neutral fill
 }
 
 function brickTexture() {
