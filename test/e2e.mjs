@@ -240,12 +240,18 @@ try {
   await page.waitForFunction(() => window.__rmc.state === 'MENTAL_MODE', { timeout: 15000 });
   await page.evaluate(() => window.__rmc.chooseMental('blind'));
   await page.waitForFunction(() => window.__rmc.state === 'BLIND', { timeout: 15000 });
-  await page.waitForFunction(() => window.__rmc.blindShown && window.__rmc.blindHidden, { timeout: 15000 });
-  check(true, 'Blindfolded mode hides the pieces and turns the board red');
+  await page.waitForFunction(() => window.__rmc.blindHidden, { timeout: 15000 });
+  check(true, 'Blindfolded mode hides the pieces (mask passes through, no red tint)');
   await page.screenshot({ path: SHOTS + 'cabin-10-blind.png' });
+  // peek: pieces reappear for a moment, then the blindfold goes back on
+  const peeked = await page.evaluate(() => { window.__rmc.blindPeek(); return !window.__rmc.blindHidden; });
+  check(peeked, 'the peek button takes the blindfold off (pieces visible for a moment)');
+  await page.waitForFunction(() => window.__rmc.blindHidden, { timeout: 5000 });
+  check(true, 'the blindfold goes back on after the peek');
+  // play a move; the pawn replies, pieces stay hidden
   await page.evaluate(() => window.__rmc.blindMove('e2', 'e4'));
   await page.waitForFunction(() => window.__rmc.blindTurn && window.__rmc.blindHidden, { timeout: 30000 });
-  check(await page.evaluate(() => document.querySelector('#webgl') && window.__rmc.blindHidden), 'you can move blind and the pawn replies (pieces stay hidden)');
+  check(await page.evaluate(() => window.__rmc.blindHidden), 'you can move blind and the pawn replies (pieces stay hidden)');
 
   await browser.close();
 } catch (e) {

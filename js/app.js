@@ -16,7 +16,7 @@ import { Paper } from './paper.js';
 import { CardDeck } from './cards.js';
 import { FlipButton } from './flipbutton.js';
 import { loadPieces } from './pieces.js';
-import { FAST, wait } from './tween.js';
+import { FAST, wait, tween } from './tween.js';
 import { sounds, toggleMute, isMuted } from './sound.js';
 import { floatLabel, sparkle, speak, hush, toast, askPromotion, tickSpeech } from './ui.js';
 
@@ -348,10 +348,11 @@ $('btn-mental-back').addEventListener('click', () => {
   speak('Very well. <span class="q">Study</span>, or your <span class="q">mind</span>?');
 });
 
-function showChallenge(html, { retry = false } = {}) {
+function showChallenge(html, { retry = false, peek = false } = {}) {
   $('challenge-msg').innerHTML = html;
   $('challenge-hud').hidden = false;
   $('btn-challenge-retry').hidden = !retry;
+  $('btn-peek').hidden = !peek;
 }
 
 function hideChallengeHuds() {
@@ -378,27 +379,52 @@ function exitChallenge() {
 
 /* ── Blindfolded Mode ── */
 
+// A black mask sweeping across the whole view; `atCover` fires at full black.
+async function maskWipe(atCover) {
+  const m = $('blindfold');
+  m.hidden = false; m.style.opacity = '0';
+  await tween({ ms: FAST.on ? 0 : 230, ease: 'easeInQuad', onUpdate: (v) => { m.style.opacity = String(v); } });
+  atCover && atCover();
+  await wait(FAST.on ? 0 : 110);
+  await tween({ ms: FAST.on ? 0 : 340, ease: 'easeOutQuad', onUpdate: (v) => { m.style.opacity = String(1 - v); } });
+  m.style.opacity = '0'; m.hidden = true;
+}
+
 async function startBlindfold() {
   state.lastChallenge = 'blind';
   setPhase('BLIND');
   deck.reset(); hideChallengeHuds();
   await paper.slideOut();
   state.blind = new Chess();
-  state.blindColor = 'w'; state.blindTurn = true; state.blindLocked = false; state.blindOver = false;
+  state.blindColor = 'w'; state.blindTurn = true; state.blindLocked = false; state.blindOver = false; state.blindPeeking = false;
   board.showHints = false;
   board.setPiecesVisible(true);
-  board.setOrientation('w');
+  board.setOrientation(state.blindColor);
   board.setPosition(START_FEN);
   board.clearHighlights();
-  host.leanIn();
-  speak('Hold still. This won\'t hurt… much.');
-  await wait(FAST.on ? 0 : 750);
+  speak('Hold still.');
+  await host.leanIn();                                    // the pawn reaches forward…
+  await maskWipe(() => board.setPiecesVisible(false));    // …the mask passes, the pieces vanish
   if (state.phase !== 'BLIND') return;
-  $('blindfold').hidden = false;
-  board.setPiecesVisible(false);
   host.leanBack();
-  showChallenge('The board is <span class="q">red</span> and the pieces are gone. Play from <span class="q">memory</span> — you are white.');
+  const side = state.blindColor === 'w' ? 'white' : 'black';
+  showChallenge(`You are now <span class="q">blindfolded</span> from the pieces. You are playing <span class="q">${side}</span>.`, { peek: true });
 }
+
+// Take the blindfold off for one second — but the pawn is not pleased.
+function blindPeek() {
+  if (state.phase !== 'BLIND' || state.blindPeeking) return;
+  state.blindPeeking = true;
+  board.setPiecesVisible(true);          // a glimpse of the truth
+  host.react('bad');                     // furrowed brow + a shake
+  sounds.wrong();
+  speak('<span class="q">Cheater.</span>', { hold: 1300 });
+  setTimeout(() => {
+    if (state.phase === 'BLIND') board.setPiecesVisible(false);
+    state.blindPeeking = false;
+  }, FAST.on ? 0 : 1000);
+}
+$('btn-peek').addEventListener('click', blindPeek);
 
 function blindLast(mv) {
   board.clearHighlights('last-from'); board.clearHighlights('last-to'); board.clearHighlights('check');
@@ -467,14 +493,15 @@ const PIECE_NAME = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight',
 
 function randomShakerPosition() {
   const used = new Set(); const pieces = [];
-  const pick = (type) => {
+  const adjacent = (a, b) => Math.abs(a.charCodeAt(0) - b.charCodeAt(0)) <= 1 && Math.abs(+a[1] - +b[1]) <= 1;
+  const pick = (type, avoid) => {
     let sq, tries = 0;
     do { sq = 'abcdefgh'[rndInt(8)] + (1 + rndInt(8)); tries++; }
-    while ((used.has(sq) || (type === 'p' && (sq[1] === '1' || sq[1] === '8'))) && tries < 60);
+    while ((used.has(sq) || (type === 'p' && (sq[1] === '1' || sq[1] === '8')) || (avoid && adjacent(sq, avoid))) && tries < 80);
     used.add(sq); return sq;
   };
-  pieces.push({ color: 'w', type: 'k', sq: pick('k') });
-  pieces.push({ color: 'b', type: 'k', sq: pick('k') });
+  const wk = pick('k'); pieces.push({ color: 'w', type: 'k', sq: wk });
+  const bk = pick('k', wk); pieces.push({ color: 'b', type: 'k', sq: bk });   // kings can't be adjacent
   const types = ['q', 'r', 'r', 'b', 'b', 'n', 'n', 'p', 'p'];
   for (let i = 0; i < 5; i++) { const type = types[rndInt(types.length)]; pieces.push({ color: rndInt(2) ? 'w' : 'b', type, sq: pick(type) }); }
   return { pieces, fen: shakerFen(pieces) };
@@ -503,7 +530,8 @@ async function startShaker() {
   $('blindfold').hidden = true;
   await paper.slideOut();
   const setup = randomShakerPosition();
-  state.shaker = { setup, queue: [], idx: 0, current: null, lost: false, done: false };
+  // `remaining` are the pieces still to place, in a random asking order
+  state.shaker = { setup, remaining: shuffle(setup.pieces.slice()), current: null, lost: false, done: false };
   board.setOrientation('w');
   board.setPosition(setup.fen);
   board.clearHighlights();
@@ -514,27 +542,36 @@ async function startShaker() {
   sounds.capture();
   await board.shakeOff();
   if (state.phase !== 'SHAKER') return;
-  state.shaker.queue = shuffle(setup.pieces.slice());
   setPhase('SHAKER_PLACE');
   nextShakerPiece();
 }
 
+// Squares that would be a correct home for the currently-floating kind — every
+// not-yet-placed piece of the same colour & type (so duplicate bishops/rooks/etc.
+// each accept either of their squares).
+function shakerValidSquares() {
+  const c = state.shaker.current;
+  return state.shaker.remaining.filter((p) => p.color === c.color && p.type === c.type).map((p) => p.sq);
+}
+
 function nextShakerPiece() {
   const s = state.shaker;
-  if (!s || s.idx >= s.queue.length) return shakerWin();
-  s.current = s.queue[s.idx];
+  if (!s || s.remaining.length === 0) return shakerWin();
+  s.current = s.remaining[0];
   board.floatPiece(s.current.color, s.current.type);
-  showChallenge(`Where did the <span class="q">${s.current.color === 'w' ? 'white' : 'black'} ${PIECE_NAME[s.current.type]}</span> stand? <span class="dim">${s.queue.length - s.idx} left</span>`);
+  showChallenge(`Where did the <span class="q">${s.current.color === 'w' ? 'white' : 'black'} ${PIECE_NAME[s.current.type]}</span> stand? <span class="dim">${s.remaining.length} left</span>`);
 }
 
 function placeShakerPiece(sq) {
   const s = state.shaker;
   if (!s || !s.current || state.phase !== 'SHAKER_PLACE') return;
   if (board.pieceAt.has(sq)) return;              // square taken — just ignore
-  if (sq === s.current.sq) {
+  const c = s.current;
+  const i = s.remaining.findIndex((p) => p.color === c.color && p.type === c.type && p.sq === sq);
+  if (i >= 0) {
     board.dropFloatingTo(sq); sounds.correct();
-    s.idx++;
-    if (s.idx >= s.queue.length) shakerWin();
+    s.remaining.splice(i, 1);                      // that piece is placed
+    if (s.remaining.length === 0) shakerWin();
     else nextShakerPiece();
   } else {
     shakerLose();
@@ -551,14 +588,16 @@ function shakerWin() {
 
 function shakerLose() {
   const c = state.shaker.current;
+  const spots = shakerValidSquares();
   state.shaker.lost = true;
   setPhase('SHAKER_DONE');
   sounds.wrong();
   board.removeFloating();
   board.setPosition(state.shaker.setup.fen);      // reveal the truth
-  board.highlight(c.sq, 'hint-glow');
-  speak(`<span class="q">Wrong.</span> It stood on <span class="q">${c.sq}</span>.`);
-  showChallenge(`Wrong — that ${PIECE_NAME[c.type]} belonged on <span class="q">${c.sq}</span>.`, { retry: true });
+  spots.forEach((sq) => board.highlight(sq, 'hint-glow'));
+  const where = spots.join(' or ');
+  speak(`<span class="q">Wrong.</span> It belonged on <span class="q">${where}</span>.`);
+  showChallenge(`Wrong — that ${PIECE_NAME[c.type]} belonged on <span class="q">${where}</span>.`, { retry: true });
 }
 
 /* ──────────────────── simple review mode ───────────────── */
@@ -1199,6 +1238,7 @@ window.__rmc = {
   get blindTurn() { return state.blindTurn; },
   get blindOver() { return state.blindOver; },
   blindMove(from, to, promo) { return blindUserMove({ from, to, promotion: promo }); },
+  blindPeek() { return blindPeek(); },
   get shakerCurrent() { const c = state.shaker && state.shaker.current; return c ? { sq: c.sq, color: c.color, type: c.type } : null; },
   shakerPlace(sq) { return placeShakerPiece(sq); },
   get shakerLost() { return !!(state.shaker && state.shaker.lost); },
