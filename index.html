@@ -4,6 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>Revise My Chess — the cabin</title>
+<meta name="description" content="Review your chess.com games in a candlelit 3D cabin: replay your blunders, step through games, rebuild a flung board from memory, or play blindfolded against the pawn." />
+<meta name="theme-color" content="#0c0c0f" />
+<meta property="og:title" content="Revise My Chess — the cabin" />
+<meta property="og:description" content="Fix your blunders, step through your games, or take on the pawn's mental challenges — in a candlelit 3D cabin." />
+<meta property="og:type" content="website" />
 <link rel="stylesheet" href="css/style.css" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='82' font-size='80'>♟</text></svg>" />
 <script type="importmap">
@@ -21,8 +26,27 @@
 
 <!-- corner controls -->
 <div id="corner">
+  <button id="btn-modes" class="rune-btn" title="Switch modes" hidden>☰ modes</button>
   <button id="btn-rename" class="rune-btn" title="Give a different name" hidden>✎ name</button>
   <button id="btn-sound" class="rune-btn" title="Toggle sound">♪</button>
+</div>
+
+<!-- mode switcher: jump straight to any of the four modes -->
+<div id="nav-overlay" class="modal" hidden>
+  <div class="parchment scrap mode-card">
+    <p>Where to, <span id="nav-name-label" class="q"></span>?</p>
+    <div class="mode-choices nav-grid">
+      <button class="ink-btn go" id="nav-fix">⚔ Fix Mistakes<small>replay your blunders</small></button>
+      <button class="ink-btn" id="nav-review">📖 Simple Review<small>step through a game</small></button>
+      <button class="ink-btn" id="nav-shaker">🌀 Board Shaker<small>rebuild from memory</small></button>
+      <button class="ink-btn" id="nav-blind">🩸 Blindfolded<small>play unseen</small></button>
+    </div>
+    <div class="nav-links">
+      <button class="link-btn" id="nav-games">📜 choose another game</button>
+      <button class="link-btn" id="nav-name">✎ change name</button>
+      <button class="link-btn" id="nav-close">✕ close</button>
+    </div>
+  </div>
 </div>
 
 <!-- start menu: which kind of session -->

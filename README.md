@@ -1,49 +1,61 @@
 # ♟ Revise My Chess — *the cabin*
 
-You wake at a table in a dark wooden cabin, lit by guttering candles. Across
-the table sits a giant pawn with two big eyes. He asks for your **chess.com**
-name, slides a sheet of parchment listing your recent losses, and then makes
-you replay the exact moments you threw each game away — on a real **3D board**,
-with **Stockfish** judging every move.
+A dark wooden cabin, lit by guttering candles. Across a floating board sits a
+giant pawn with two big eyes. He asks for your **chess.com** name and then puts
+you through four things — all on a real **3D board**, with **Stockfish**
+(WebAssembly, in a Web Worker — nothing leaves your machine) doing the thinking.
 
-A WebGL homage to *Inscryption*'s Act 1, built on a chess blunder-trainer.
+A WebGL homage to *Inscryption*'s Act 1, built on a chess trainer.
 
 ![the cabin](test/shots/cabin-1-boot.png)
 
-## How it works
+## The four modes
 
-1. **It opens at the table** — no menu. The board is already set, candles lit.
-2. **The host asks your chess.com name.** Your recent losses are fetched from
-   the public chess.com API (no login or key). He slides a parchment of games.
-3. **Touch a game.** Stockfish (WebAssembly, in a Web Worker — nothing leaves
-   your machine) reads it and finds where it went wrong.
-4. **Replay your blunders on the 3D board.** For each critical moment the board
-   rewinds, the host's last move replays, and he asks you to find the move you
-   *should* have played:
-   - **Best move** (≤0.25 pawns from optimal) → he's pleased; click **Next** (→).
-   - **Great** (≤0.8) → praised, but you can retry for the stronger move, or keep it.
-   - **Inaccurate** (≤1.6) → it slips; try again.
-   - **Worse** → the board resets; try again. You always get to retry.
-   - **✦ hint** highlights the piece; **I don't know** reveals the answer.
-   - **←** retries the position (even after solving — without re-scoring); **→** advances.
-5. **The verdict** — a parchment of your stats and a rank, from *Blunder
-   Apprentice* to *Silicon Grandmaster*.
+At the start you pick a track — **Study Games** or **Mental Challenges** — and
+give your chess.com name. From then on a **☰ modes** button (top-right) lets you
+hop straight between any of the four modes:
 
-![the quiz](test/shots/cabin-3-quiz.png)
+**Study Games** (needs one of your real games):
+- **⚔ Fix Mistakes** — Stockfish finds where the game went wrong; for each
+  blunder the board replays up to the moment and you must find the move you
+  *should* have played. Each mistake is a collectible **card** (a 2D diagram
+  with a red arrow for what you played); solve it and a green best-move arrow is
+  added and the card flies into a **chest** at the back of the room. A live eval
+  bar, the game notation, and best/played/yours evals sit alongside. **←** steps
+  back to the previous position (the card lifts back out of the chest); **→**
+  advances.
+- **📖 Simple Review** — step through the whole game with the arrow keys, branch
+  off by dragging a piece (chess.com-style variations), with a live eval bar.
 
-## Running it
+**Mental Challenges** (the pawn plays at your rating, via Stockfish Skill Level):
+- **🌀 Board Shaker** — memorise a position, the pawn flings the board with a
+  tumbling animation, then you rebuild it one piece at a time. One wrong
+  placement loses instantly.
+- **🩸 Blindfolded** — the pawn reaches forward with a mask; the pieces vanish
+  (the board stays normal) and you play a full game from memory, seeing only the
+  last move as highlighted squares. A **peek (1s)** button flashes the pieces —
+  but the pawn calls you a cheater.
 
-A fully static site (a server is required for the Stockfish worker and ES
-modules — opening the file directly won't work):
+Evals are reproducible: searches use a fixed **node budget** (not a wall-clock
+budget), so the same position always scores the same instead of drifting.
+
+![fix mistakes](test/shots/cabin-3-quiz.png)
+
+## Running / deploying
+
+A fully **static** site — no build step, no backend. Any static host works
+(GitHub Pages, Netlify, a plain file server). It just needs to be *served* (the
+Stockfish worker + ES modules won't run from `file://`), and `.wasm` served as
+`application/wasm`:
 
 ```bash
 python serve.py            # or: npx http-server -p 8080
 # then open http://127.0.0.1:8080
 ```
 
-`serve.py` sends correct MIME types (Windows' `http.server` mislabels `.js`/
-`.wasm`, which breaks the modules) and no-cache headers so a refresh always
-picks up fresh code. Deep link: `?user=yourname` pre-fills the name.
+`serve.py` sends correct MIME types and no-cache headers for local dev. Deep
+link: `?user=yourname` pre-fills the name. The only network calls are to the
+public chess.com API (CORS-enabled, no key) for your games.
 
 ## Tech
 
@@ -63,16 +75,20 @@ picks up fresh code. Deep link: `?user=yourname` pre-fills the name.
 ### Module map
 
 ```
-js/app.js     flow state machine (BOOT→ASK_USERNAME→FETCHING→PICK_GAME→
-              ANALYZING→QUIZ→SUMMARY); judging/scoring; window.__rmc test hook
-js/scene.js   renderer, camera, room, table, candle lights + flicker, vignette
-js/board3d.js the 3D board: square↔world map, raycast input, move/highlight anim
-js/pieces.js  procedural pieces (LatheGeometry profiles + primitive decor)
-js/host.js    the pawn host: bob, blink, gaze, lean, reactions
-js/paper.js   the parchment: game list / verdict, slide-in, raycast row-pick
-js/ui.js      thin HTML overlays: speech, float labels, sparkles, promotion
-js/tween.js   promise-based rAF tweens (FAST flag for deterministic tests)
-js/chesscom.js / engine.js / analysis.js / sound.js   unchanged engine code
+js/app.js      flow state machine (START → the four modes) + judging/scoring +
+               the window.__rmc test hook that drives everything headlessly
+js/scene.js    renderer, camera, brick-tower room, candle/torch lights, vignette
+js/board3d.js  the 3D board: square↔world map, raycast input, move/highlight anim,
+               piece-hiding (blindfold) + fling/place helpers (board shaker)
+js/pieces.js   the chess piece models (GLTF), painted ivory/dark at runtime
+js/host.js     the pawn host: bob, blink, gaze, lean, brow reactions
+js/paper.js    the parchment: game list, slide-in, raycast row-pick, pager
+js/cards.js    the mistake-card deck + the chest (2D diagram cards, fling-to-chest)
+js/flipbutton.js  the wired 3D "FLIP" button
+js/store.js    localStorage (remembered name, chest tally) + mistake tagging
+js/ui.js       thin HTML overlays: typewriter speech + 8-bit voice, sparkles, promotion
+js/tween.js    promise-based rAF tweens (FAST flag for deterministic tests)
+js/chesscom.js / engine.js / analysis.js / sound.js   API, Stockfish, analysis, synth
 ```
 
 The pieces and board live entirely in WebGL (no DOM squares), so the automated

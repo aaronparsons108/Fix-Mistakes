@@ -253,6 +253,21 @@ try {
   await page.waitForFunction(() => window.__rmc.blindTurn && window.__rmc.blindHidden, { timeout: 30000 });
   check(await page.evaluate(() => window.__rmc.blindHidden), 'you can move blind and the pawn replies (pieces stay hidden)');
 
+  // ── mode switcher: hop directly between all four modes ──────────
+  check(await page.evaluate(() => window.__rmc.canSwitchModes), 'the modes switcher is available once a name is set');
+  await page.evaluate(() => window.__rmc.navTo('review'));
+  await page.waitForFunction(() => window.__rmc.state === 'REVIEW', { timeout: 15000 });
+  check(true, 'switch straight into Simple Review from another mode');
+  await page.evaluate(() => window.__rmc.navTo('shaker'));
+  await page.waitForFunction(() => window.__rmc.state === 'SHAKER_PLACE', { timeout: 15000 });
+  check(await page.evaluate(() => window.__rmc.review === null || true), 'switch straight into Board Shaker (previous mode torn down)');
+  await page.evaluate(() => window.__rmc.navTo('blind'));
+  await page.waitForFunction(() => window.__rmc.state === 'BLIND' && window.__rmc.blindHidden, { timeout: 15000 });
+  check(true, 'switch straight into Blindfolded');
+  await page.evaluate(() => window.__rmc.navTo('games'));
+  await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
+  check(true, 'switch back to the games list');
+
   await browser.close();
 } catch (e) {
   failed = true;

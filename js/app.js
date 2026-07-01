@@ -205,27 +205,62 @@ $('username-form').addEventListener('submit', (e) => {
   const name = $('username-input').value.trim();
   if (name) doFetch(name);
 });
-$('btn-rename').addEventListener('click', () => {
-  if (state.phase === 'FETCHING') return;
-  // tear down whatever session was in progress (cards, bars, review), so nothing
-  // is left hanging on the board.
+// Tear down whatever mode is in progress so nothing is left hanging on the board.
+function teardownCurrent() {
   state.session++;
-  state.rev = null;
+  state.rev = null; state.blind = null; state.shaker = null;
+  state.blindOver = false; state.blindPeeking = false;
   deck.reset();
+  board.showHints = true; board.setPiecesVisible(true); board.removeFloating();
+  board.clearHighlights(); board.clearArrows();
+  $('quiz-hud').hidden = true; $('quiz-notation').hidden = true;
+  $('review-hud').hidden = true; $('evalbar').hidden = true;
+  $('mode-overlay').hidden = true; $('mental-overlay').hidden = true;
+  $('blindfold').hidden = true; $('challenge-hud').hidden = true;
+  hush();
+}
+
+function openRename() {
+  if (state.phase === 'FETCHING') return;
+  teardownCurrent();
   paper.slideOut();
   setPhase('ASK_USERNAME');
-  board.clearHighlights(); board.clearArrows();
-  $('btn-rename').hidden = true;
-  $('quiz-hud').hidden = true;
-  $('quiz-notation').hidden = true;
-  $('review-hud').hidden = true;
-  $('evalbar').hidden = true;
-  $('mode-overlay').hidden = true;
+  $('btn-rename').hidden = true; $('btn-modes').hidden = true;
   $('username-panel').hidden = false;
   $('username-error').hidden = true;
   speak('Another name? Go on.');
   $('username-input').focus?.();
+}
+$('btn-rename').addEventListener('click', openRename);
+
+/* ── mode switcher (jump between all four modes) ── */
+
+$('btn-modes').addEventListener('click', () => {
+  if (!state.username) return;
+  $('nav-name-label').textContent = state.username;
+  $('nav-overlay').hidden = false;
 });
+$('nav-close').addEventListener('click', () => { $('nav-overlay').hidden = true; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('nav-overlay').hidden = true; });
+$('nav-name').addEventListener('click', () => { $('nav-overlay').hidden = true; openRename(); });
+$('nav-games').addEventListener('click', () => navTo('games'));
+$('nav-fix').addEventListener('click', () => navTo('fix'));
+$('nav-review').addEventListener('click', () => navTo('review'));
+$('nav-shaker').addEventListener('click', () => navTo('shaker'));
+$('nav-blind').addEventListener('click', () => navTo('blind'));
+
+async function navTo(mode) {
+  $('nav-overlay').hidden = true;
+  if (!state.username) return;
+  teardownCurrent();
+  if (mode === 'shaker') return startShaker();
+  if (mode === 'blind') return startBlindfold();
+  if (mode === 'games') return backToGames();
+  // Fix / Review act on the most recently chosen game; without one, pick first.
+  if (!state.game) { await backToGames(mode === 'fix' ? 'Pick a game to fix.' : 'Pick a game to step through.'); return; }
+  if (mode === 'fix') return startFixMistakes();
+  if (mode === 'review') return startReview();
+}
 
 async function doFetch(name) {
   setPhase('FETCHING');
@@ -239,9 +274,10 @@ async function doFetch(name) {
     if (!games.length) throw new Error("No games here. Are you sure that's the name?");
     state.username = name; state.feed = feed; state.page = 0; state.games = games;
     rememberUser(name);
+    state.blindSkill = eloToSkill(userElo());   // needed by the mental modes from any track
     $('username-panel').hidden = true;
-    $('btn-rename').hidden = false;
-    if (state.track === 'mental') { state.blindSkill = eloToSkill(userElo()); showMentalPicker(); }
+    $('btn-rename').hidden = false; $('btn-modes').hidden = false;
+    if (state.track === 'mental') showMentalPicker();
     else await showGames(LINES.pickGame(name));
   } catch (ex) {
     setPhase('ASK_USERNAME');
@@ -1239,6 +1275,8 @@ window.__rmc = {
   get blindOver() { return state.blindOver; },
   blindMove(from, to, promo) { return blindUserMove({ from, to, promotion: promo }); },
   blindPeek() { return blindPeek(); },
+  get canSwitchModes() { return !$('btn-modes').hidden; },
+  navTo(m) { return navTo(m); },
   get shakerCurrent() { const c = state.shaker && state.shaker.current; return c ? { sq: c.sq, color: c.color, type: c.type } : null; },
   shakerPlace(sq) { return placeShakerPiece(sq); },
   get shakerLost() { return !!(state.shaker && state.shaker.lost); },
