@@ -52,8 +52,12 @@
     <button class="ink-btn good" id="btn-accept" hidden>keep it →</button>
     <button class="ink-btn go" id="btn-next" hidden>next →</button>
   </div>
-  <div class="hud-hint">←&nbsp;retry&nbsp;·&nbsp;→&nbsp;next</div>
+  <div class="hud-hint">←&nbsp;back&nbsp;·&nbsp;→&nbsp;next</div>
+  <button class="link-btn" id="btn-to-review">↔ step through this game instead</button>
 </div>
+
+<!-- game notation (bottom, for fix mistakes) -->
+<div id="quiz-notation" class="parchment quiz-notation" hidden></div>
 
 <!-- mode picker -->
 <div id="mode-overlay" class="modal" hidden>
@@ -75,7 +79,7 @@
   <button class="link-btn" id="btn-rev-exit">✕ leave review</button>
 </div>
 
-<!-- vertical eval bar (review) -->
+<!-- vertical eval bar (review + fix mistakes) -->
 <div id="evalbar" class="evalbar" hidden>
   <div class="eb-fill" id="eb-fill"></div>
   <div class="eb-zero"></div>

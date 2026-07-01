@@ -221,6 +221,18 @@ body {
 .rev-move { font-family: 'Typewriter', monospace; font-size: 22px; color: #2c2114; min-height: 28px; letter-spacing: 1px; }
 .rev-move .num { color: #7a5a34; }
 .rev-move .dim { color: #8a754a; font-style: italic; font-family: 'Fell', serif; font-size: 17px; letter-spacing: 0; }
+/* game notation strip (fix mistakes, bottom-centre) */
+.quiz-notation {
+  left: 50%; bottom: 16px; transform: translateX(-50%);
+  max-width: min(640px, 68vw); padding: 9px 18px; text-align: center;
+  font-family: 'Fell', serif; font-style: italic; font-size: 15px; color: #6a5430;
+  white-space: nowrap; overflow-x: auto; line-height: 1.5;
+}
+.quiz-notation .ml-no { color: #9a8454; font-style: normal; }
+.quiz-notation .ml-cur { background: #d8b66a; color: #2c2114; border-radius: 3px; padding: 0 4px; font-style: normal; }
+.quiz-notation .ml-turn { color: #7a2618; font-style: normal; font-family: 'Typewriter', monospace; font-size: 12px; margin-left: 8px; letter-spacing: 1px; }
+#quiz-hud .link-btn { display: block; margin: 4px auto 0; }
+
 .rev-line { font-family: 'Fell', serif; font-style: italic; font-size: 14px; color: #6a5430; min-height: 18px; margin-top: 2px; line-height: 1.5; }
 .rev-line .ml-no { color: #9a8454; font-style: normal; }
 .rev-line .ml-cur { background: #d8b66a; color: #2c2114; border-radius: 3px; padding: 0 3px; font-style: normal; }

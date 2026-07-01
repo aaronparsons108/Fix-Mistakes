@@ -181,10 +181,20 @@ $('username-form').addEventListener('submit', (e) => {
 });
 $('btn-rename').addEventListener('click', () => {
   if (state.phase === 'FETCHING') return;
+  // tear down whatever session was in progress (cards, bars, review), so nothing
+  // is left hanging on the board.
+  state.session++;
+  state.rev = null;
+  deck.reset();
   paper.slideOut();
   setPhase('ASK_USERNAME');
+  board.clearHighlights(); board.clearArrows();
   $('btn-rename').hidden = true;
   $('quiz-hud').hidden = true;
+  $('quiz-notation').hidden = true;
+  $('review-hud').hidden = true;
+  $('evalbar').hidden = true;
+  $('mode-overlay').hidden = true;
   $('username-panel').hidden = false;
   $('username-error').hidden = true;
   speak('Another name? Go on.');
@@ -280,6 +290,7 @@ async function backToGames(line) {
   setPhase('PICK_GAME');
   deck.reset();
   $('quiz-hud').hidden = true;
+  $('quiz-notation').hidden = true;
   $('review-hud').hidden = true;
   $('evalbar').hidden = true;
   $('mode-overlay').hidden = true;
@@ -294,22 +305,29 @@ async function backToGames(line) {
 // Step through a game move-by-move with the arrow keys; branch off at any point
 // by dragging a piece. The eval bar always reflects the position on the board.
 
-async function startReview() {
+// atPly lets us jump straight in at a given move — used when switching over from
+// a Fix-Mistakes position.
+async function startReview({ atPly = 0 } = {}) {
   const game = state.game;
   setPhase('REVIEW');
+  deck.reset();                    // clear any Fix-Mistakes cards
+  $('quiz-hud').hidden = true;
+  $('quiz-notation').hidden = true;
   await paper.slideOut();
   flareCandles();
   const moves = parseGame(game.pgn).map((m) => ({ ...m, uci: m.from + m.to + (m.promotion || '') }));
   state.rev = { moves, line: [], ply: 0, chess: new Chess(START_FEN), branched: false, userColor: game.userColor };
+  for (let p = 0; p < atPly && p < moves.length; p++) {   // seek to the handed-over position
+    const made = state.rev.chess.move({ from: moves[p].from, to: moves[p].to, promotion: moves[p].promotion });
+    state.rev.line.push(recordMove(made, state.rev.chess.fen()));
+    state.rev.ply++;
+  }
   board.setOrientation(game.userColor);
-  board.setPosition(START_FEN);
-  board.clearHighlights(); board.clearArrows();
   $('review-hud').hidden = false;
   $('evalbar').hidden = false;
   host.leanBack();
-  speak('Step through with the <span class="q">arrows</span>. Or move a piece to try your own line.');
-  updateReviewHud();
-  evalCurrent();
+  speak(atPly ? 'Step through from here.' : 'Step through with the <span class="q">arrows</span>. Or move a piece to try your own line.');
+  applyReviewPly();
 }
 
 function recordMove(made, fen) {
@@ -468,10 +486,14 @@ async function loadPuzzle(i) {
   setPhase('QUIZ');
 
   $('quiz-hud').hidden = false;
+  $('evalbar').hidden = false;
+  $('quiz-notation').hidden = false;
   board.setOrientation(m.userColor);
   renderCounter();
   $('hud-turn').textContent = '';
   showEvalGraph(m);
+  setEvalBar(m.evalBest, m.mateBest);   // the position's eval, chess.com-style bar
+  updateQuizNotation(m);
   setButtons({});
   speak(i === 0 ? 'Watch how it went.' : 'It keeps going.');
   setFeedback('<span class="dim">click the board to skip ahead</span>', 'info');
@@ -572,6 +594,7 @@ function judge(kind, m, uci, after) {
   const replay = state.replaying;
   state.gaze = board.squareWorld(to, 0.4);
   fillYours(m, after.score, after.mateIn, kind, san);
+  setEvalBar(after.score, after.mateIn);   // the bar follows the move you made
 
   if (kind === 'best') {
     revealBestSan(m);
@@ -616,6 +639,7 @@ function resetPuzzlePosition() {
   board.setPosition(m.fen);
   restoreHighlights(m);
   showEvalGraph(m);
+  setEvalBar(m.evalBest, m.mateBest);
   state.gaze = null;
   setButtons({ hint: !state.hintUsed, idk: true });
   state.locked = false;
@@ -632,6 +656,75 @@ async function nextPuzzle() {
   addSealed(state.username, 1);
   if (state.idx + 1 < state.moments.length) loadPuzzle(state.idx + 1);
   else completeSession();
+}
+
+// Set up puzzle i on the board with no playback (used when stepping back).
+function renderPuzzleAt(i) {
+  const m = state.moments[i];
+  state.idx = i;
+  state.attempts = 0; state.hintUsed = false; state.playing = false; state.skipPlayback = false;
+  state.replaying = state.results[i] != null;   // revisiting a solved one shouldn't re-score it
+  board.setOrientation(m.userColor);
+  board.setPosition(m.fen);
+  state.quiz = new Chess(m.fen);
+  restoreHighlights(m);
+  renderCounter();
+  $('hud-turn').textContent = (m.userColor === 'w' ? 'WHITE' : 'BLACK') + ' TO MOVE';
+  showEvalGraph(m);
+  setEvalBar(m.evalBest, m.mateBest);
+  updateQuizNotation(m);
+  setFeedback('', '');
+  // if this one was already dealt with, let the player move on again as well
+  setButtons(state.results[i] != null ? { hint: true, idk: true, next: true } : { hint: true, idk: true });
+  state.gaze = null;
+  state.locked = false;
+}
+
+// Rewind the board move-by-move from moment `fromIdx` back to `toIdx`.
+async function rewindBoard(fromIdx, toIdx, session) {
+  const startPly = state.moments[toIdx].ply, endPly = state.moments[fromIdx].ply;
+  const chess = new Chess(state.moments[toIdx].fen);
+  const fens = [chess.fen()];
+  for (let p = startPly; p < endPly; p++) {
+    const mv = state.allMoves[p];
+    chess.move({ from: mv.from, to: mv.to, promotion: mv.promotion });
+    fens.push(chess.fen());
+  }
+  for (let k = fens.length - 2; k >= 0; k--) {
+    if (session !== state.session) return;
+    board.setPosition(fens[k]);
+    const mv = state.allMoves[startPly + k];      // the move we just took back
+    board.clearHighlights('last-from'); board.clearHighlights('last-to');
+    if (mv) { board.highlight(mv.from, 'last-from'); board.highlight(mv.to, 'last-to'); }
+    sounds.move();
+    await wait(170);
+  }
+}
+
+// Back arrow: step to the previous quizzed position; its card comes back out of
+// the chest and the board rewinds to it.
+async function prevPuzzle() {
+  if (state.phase !== 'QUIZ' || state.playing || state.idx <= 0) return;
+  const from = state.idx, to = from - 1;
+  const session = ++state.session;
+  state.locked = true;
+  setButtons({});
+  setFeedback('<span class="dim">back a step…</span>', 'info');
+  hush();
+  deck.deactivateToStack(from);              // the current card returns to the pile
+  await deck.retrieveFromChest(to);          // the previous card lifts out of the chest
+  if (session !== state.session) return;
+  await rewindBoard(from, to, session);
+  if (session !== state.session) return;
+  renderPuzzleAt(to);
+  speak(`Back to move ${state.moments[to].moveNumber}.`);
+}
+
+// Jump from the current Fix-Mistakes position straight into Simple Review.
+function switchToReview() {
+  if (state.phase !== 'QUIZ') return;
+  const atPly = state.moments[state.idx] ? state.moments[state.idx].ply : 0;
+  startReview({ atPly });
 }
 
 // No verdict screen — when the game is finished, return to the games paper.
@@ -663,6 +756,7 @@ async function doReveal() {
   const { x, y } = board.squareCenter(to);
   sparkle(x, y, 'info'); floatLabel(x, y, m.bestSan, 'info');
   revealBestSan(m);
+  setEvalBar(m.evalBest, m.mateBest);   // the bar shows where the best move lands
   deck.markSolved(state.idx);   // green arrow for the right move on the card
   if (state.results[state.idx] == null) { state.results[state.idx] = 'revealed'; state.stats.revealed++; renderCounter(); }
   speak(LINES.reveal(m.bestSan));
@@ -679,6 +773,19 @@ function renderCounter() {
     return `<span class="pip ${cls}"></span>`;
   }).join('');
   $('hud-counter').innerHTML = `MOVE ${state.moments[state.idx].moveNumber} <span class="pips">${pips}</span>`;
+}
+
+// The game's moves up to the critical position, shown along the bottom.
+function updateQuizNotation(m) {
+  const el = $('quiz-notation'); if (!el) return;
+  const parts = [];
+  for (let p = 0; p < m.ply; p++) {
+    if (p % 2 === 0) parts.push(`<span class="ml-no">${p / 2 + 1}.</span>`);
+    parts.push(`<span class="${p === m.ply - 1 ? 'ml-cur' : ''}">${escapeText(state.allMoves[p].san)}</span>`);
+  }
+  parts.push(`<span class="ml-turn">${m.userColor === 'w' ? 'white' : 'black'} to move</span>`);
+  el.innerHTML = parts.join(' ');
+  el.scrollLeft = el.scrollWidth;
 }
 
 /* eval bars — GAME (the move you actually played), BEST, YOURS.
@@ -756,6 +863,7 @@ $('btn-accept').addEventListener('click', () => {
   deck.markSolved(state.idx); sounds.great(); nextPuzzle();
 });
 $('btn-next').addEventListener('click', () => { state.session++; nextPuzzle(); });
+$('btn-to-review').addEventListener('click', () => { sounds.tick(); switchToReview(); });
 
 document.addEventListener('keydown', (e) => {
   if (state.phase === 'REVIEW') {
@@ -766,7 +874,7 @@ document.addEventListener('keydown', (e) => {
   if (state.phase !== 'QUIZ') return;
   if (state.playing) { state.skipPlayback = true; return; }
   if (!state.quiz) return;
-  if (e.key === 'ArrowLeft') { sounds.tick(); setFeedback('', ''); retryCurrent(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prevPuzzle(); }
   else if (e.key === 'ArrowRight') { if (!$('btn-next').hidden) $('btn-next').click(); }
 });
 
@@ -819,6 +927,10 @@ window.__rmc = {
   hint() { $('btn-hint').click(); },
   retry() { retryCurrent(); },
   next() { return nextPuzzle(); },
+  prev() { return prevPuzzle(); },
+  toReview() { return switchToReview(); },
+  get evalBarShown() { return !$('evalbar').hidden; },
+  get notation() { return $('quiz-notation').textContent; },
 };
 
 // deep link ?user=name

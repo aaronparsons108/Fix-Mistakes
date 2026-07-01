@@ -95,6 +95,8 @@ try {
   check(true, 'plays through the game to the critical position');
   check(await page.evaluate(() => window.__rmc.deckSize === window.__rmc.results.length), 'a card is dealt for each mistake in the game');
   check(await page.evaluate(() => window.__rmc.activeCard === 0), 'the first position card is drawn up beside the board');
+  check(await page.evaluate(() => window.__rmc.evalBarShown && /[-+0-9M]/.test(document.getElementById('eb-num').textContent)), 'the eval bar (with number) shows during Fix Mistakes');
+  check(await page.evaluate(() => window.__rmc.notation.length > 0), 'the game notation shows along the bottom');
   await page.screenshot({ path: SHOTS + 'cabin-3-quiz.png' });
 
   // REAL raycast move: play this puzzle's best move (whatever it is)
@@ -178,6 +180,28 @@ try {
   await page.evaluate(() => document.getElementById('btn-rev-exit').click());
   await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
   check(true, 'leaving review returns to the games paper');
+
+  // ── switching from Fix Mistakes into Review clears the cards ─────
+  await page.evaluate(() => window.__rmc.pickGame(0));
+  await page.waitForFunction(() => window.__rmc.state === 'CHOOSE_MODE', { timeout: 15000 });
+  await page.evaluate(() => window.__rmc.chooseMode('fix'));
+  await page.waitForFunction(() => window.__rmc.state === 'QUIZ', { timeout: 120000 });
+  await page.waitForFunction(() => !window.__rmc.busy, { timeout: 30000 });
+  await page.evaluate(() => window.__rmc.toReview());
+  await page.waitForFunction(() => window.__rmc.state === 'REVIEW', { timeout: 15000 });
+  check(await page.evaluate(() => window.__rmc.deckSize === 0), 'switching to review from a position clears the Fix-Mistakes cards');
+
+  // ── the edit-name button tears the Fix-Mistakes session down ─────
+  await page.evaluate(() => document.getElementById('btn-rev-exit').click());
+  await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
+  await page.evaluate(() => window.__rmc.pickGame(0));
+  await page.waitForFunction(() => window.__rmc.state === 'CHOOSE_MODE', { timeout: 15000 });
+  await page.evaluate(() => window.__rmc.chooseMode('fix'));
+  await page.waitForFunction(() => window.__rmc.state === 'QUIZ', { timeout: 120000 });
+  await page.waitForFunction(() => !window.__rmc.busy, { timeout: 30000 });
+  await page.evaluate(() => document.getElementById('btn-rename').click());
+  await page.waitForFunction(() => window.__rmc.state === 'ASK_USERNAME', { timeout: 15000 });
+  check(await page.evaluate(() => window.__rmc.deckSize === 0 && !window.__rmc.evalBarShown), 'editing the name mid-session clears the cards and eval bar');
 
   await browser.close();
 } catch (e) {

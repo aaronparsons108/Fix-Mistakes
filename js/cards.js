@@ -12,9 +12,10 @@ const BOARD = 448, BX = 32, BY = 34;      // 2D board inset within the card
 const LIGHT = '#e9edcc', DARK = '#6f9350';
 const GLYPH = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 
-// where cards live in the world (left side — clear of the rope + flip button)
-const STACK = new THREE.Vector3(-7.2, -1.2, 2.4);
-const ACTIVE = new THREE.Vector3(-7.3, 2.4, -0.4);
+// where cards live in the world (left of the board, clear of the eval bar,
+// the rope, and the flip button)
+const STACK = new THREE.Vector3(-6.7, -1.2, 2.2);
+const ACTIVE = new THREE.Vector3(-6.6, 2.5, -0.4);
 const CHEST = new THREE.Vector3(-6.1, -4.5, -3.8);
 
 function sqToRC(sq, orient) {
@@ -178,17 +179,48 @@ export class CardDeck {
     this.reset();
     this.cards = moments.map((m, i) => {
       const card = new PositionCard(this.scene, m, i);
-      this._toStack(card, i, moments.length);
+      this._toStack(card, i);
       return card;
     });
   }
 
-  _toStack(card, i, n) {
+  _stackVec(i) {
     const v = STACK.clone();
     v.x += i * 0.05; v.y += i * 0.06; v.z += i * 0.03;
-    card.place(v, 0.82, this.camera);
+    return v;
+  }
+
+  _toStack(card, i) {
+    card.place(this._stackVec(i), 0.82, this.camera);
     card.group.rotation.z += (i % 2 ? -1 : 1) * 0.03;
     card.group.renderOrder = i;
+  }
+
+  // Return the active card to its slot in the stack (reverse of activate).
+  async deactivateToStack(i) {
+    const card = this.cards[i]; if (!card) return;
+    if (this.active === i) this.active = -1;
+    card.group.renderOrder = i;
+    await Promise.all([
+      tweenVec(card.group.position, this._stackVec(i), 460, 'easeInOutQuad'),
+      tween({ ms: 460, ease: 'easeInOutQuad', onUpdate: (v) => card.group.scale.setScalar(1.2 - 0.38 * v) }),
+    ]);
+    card.faceCamera(this.camera);
+  }
+
+  // Pull a previously-sealed card back out of the chest to the active spot.
+  async retrieveFromChest(i) {
+    const card = this.cards[i]; if (!card) return;
+    this.active = i; card._gone = false; card.group.visible = true; card.group.renderOrder = 100;
+    card.group.position.copy(this.chest.mouth());
+    card.group.scale.setScalar(0.12);
+    await this.chest.open();
+    await Promise.all([
+      tweenVec(card.group.position, ACTIVE, 660, 'easeOutCubic'),
+      tween({ ms: 660, ease: 'easeOutCubic', onUpdate: (v) => { card.group.scale.setScalar(0.12 + 1.08 * v); card.group.rotation.x = -1.4 * (1 - v); } }),
+    ]);
+    card.group.rotation.x = 0; card.faceCamera(this.camera);
+    await this.chest.close();
   }
 
   // Draw card i up beside the board.
