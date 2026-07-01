@@ -8,11 +8,12 @@ import { Chess } from '../lib/chess.js';
 import { Engine, formatEval } from './engine.js';
 import { fetchPlayer, openGameFeed } from './chesscom.js';
 import { analyzeGame, parseGame, uciToSan } from './analysis.js';
-import { Ledger, lastUser, rememberUser, recurringTheme } from './ledger.js';
+import { lastUser, rememberUser, sealedCount, addSealed } from './store.js';
 import { initScene, scene, camera, onFrame, flareCandles, setLampControl, getLampControl, getRopeKnob } from './scene.js';
 import { Board3D } from './board3d.js';
 import { Host, HOST_COLOR } from './host.js';
 import { Paper } from './paper.js';
+import { CardDeck } from './cards.js';
 import { FlipButton } from './flipbutton.js';
 import { loadPieces } from './pieces.js';
 import { FAST, wait } from './tween.js';
@@ -25,24 +26,23 @@ const JUDGE_DEPTH = 15;   // match the deep analysis pass when scoring attempts
 const BEST_TOL = 25, GREAT_TOL = 80, GOOD_TOL = 160;
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-// The host's voice — intimate, eerie, a little wry; never a scoreboard.
+// The host's voice — grounded and direct, with a touch of the cabin. Not corny.
 const LINES = {
-  greetFirst: `You look <span class="q">lost</span>. Sit. Tell me your <span class="q">chess.com</span> name… and I'll <span class="q">keep</span> what we find.`,
-  greetReturn: (u, n) => `You came back, <span class="q">${escapeText(u)}</span>. Good. I kept <span class="q">${n}</span> you couldn't answer — still warm. We <span class="q">settle</span> those first.`,
-  greetReturnClean: (u) => `You came back, <span class="q">${escapeText(u)}</span>. Nothing owed tonight. Let's find something new to <span class="q">regret</span>.`,
-  remembering: `Hmm. Let me <span class="q">remember</span>…`,
-  pickGame: (u) => `Here they are, <span class="q">${escapeText(u)}</span>. <span class="q">Pick</span> one.`,
-  pickAnother: `<span class="q">Pick</span> another.`,
-  settle: `These <span class="q">first</span>. The ones you looked away from.`,
-  studying: (n, theme) => `<span class="q">${n}</span> times now — ${escapeText(theme)}. <span class="q">Watch</span> for it.`,
-  cardPick: `This one. You <span class="q">looked away</span> from it last time. Look at it now.`,
-  cardBest: `<span class="q">There.</span> Struck from the ledger. That one won't follow you home again.`,
-  cardLearned: `That one's <span class="q">learned</span>. I'll trouble you with it no longer.`,
-  cardClose: `Close. But close still leaves it <span class="q">owed</span>. Back it goes — I'll ask again.`,
-  cardWorse: `No. It slips through your fingers <span class="q">again</span>. I don't forget these.`,
-  cardSame: `The same <span class="q">mistake</span>, in the same chair. That's why I keep them.`,
-  cardReveal: (san) => `I'd play <span class="q">${escapeText(san)}</span>. Sit with it. I'll bring it <span class="q">back</span> to you.`,
-  ledgerDone: `The ledger's <span class="q">quiet</span> now. On to the living games.`,
+  greetFirst: `Give me your <span class="q">chess.com</span> name. I'll pull your recent games.`,
+  greetReturn: (u) => `Welcome back, <span class="q">${escapeText(u)}</span>.`,
+  greetReturnSealed: (u, n) => `Welcome back, <span class="q">${escapeText(u)}</span>. <span class="q">${n}</span> sealed in the chest so far.`,
+  remembering: `One moment — pulling your games.`,
+  pickGame: (u) => `Here are your games, <span class="q">${escapeText(u)}</span>. Pick one.`,
+  studying: `Let me look it over.`,
+  critical: (n) => `Move ${n}. This is where it went wrong. Find the better move.`,
+  best: `That's it.`,
+  bestFirst: `That's the move.`,
+  great: `Close — there's better. Try again, or keep it.`,
+  inaccurate: `Not quite. Again.`,
+  worse: `That loses more.`,
+  same: `That's the move you played in the game. Try something else.`,
+  reveal: (san) => `The move was <span class="q">${escapeText(san)}</span>.`,
+  gameDone: `That's all of them — sealed away. Pick another game.`,
 };
 
 const state = {
@@ -56,10 +56,9 @@ const state = {
   allMoves: [], playing: false, skipPlayback: false,
   feed: null, page: 0,              // paginated game feed
   rev: null, evalSession: 0,        // simple-review state
-  ledger: null, dueQueue: [], facingLedger: false, currentCard: null,
 };
 
-let board, host, paper;
+let board, host, paper, deck;
 
 /* ───────────────────────── boot ───────────────────────── */
 
@@ -77,6 +76,7 @@ board = new Board3D(scene, camera, {
 board.setOrientation('w');
 host = new Host(scene);
 paper = new Paper(scene, camera);
+deck = new CardDeck(scene, camera, sounds);
 const flipBtn = new FlipButton(scene, () => { sounds.tick(); board.flip(); });
 board.bindPointer(canvas);
 
@@ -96,6 +96,7 @@ function stretchArm(a, b) {
 
 onFrame((t, dt) => {
   tickSpeech(dt);
+  deck.update();
   host.update(t, dt);
   host.lookAt(state.gaze);
   board.pulse(t);
@@ -136,18 +137,14 @@ canvas.addEventListener('pointercancel', ropeEnd, true);
 // click anywhere on the board to skip the move-by-move playback
 canvas.addEventListener('pointerdown', () => { if (state.playing) state.skipPlayback = true; });
 
-// pick games / page through the parchment / face ledger cards
+// pick games / page through the parchment
 canvas.addEventListener('click', (e) => {
+  if (state.phase !== 'PICK_GAME') return;
   const hit = paper.pick(e.clientX, e.clientY);
   if (!hit) return;
-  if (state.phase === 'PICK_GAME') {
-    if (hit.type === 'game') pickGame(hit.index);
-    else if (hit.type === 'next') changePage(1);
-    else if (hit.type === 'prev') changePage(-1);
-  } else if (state.phase === 'LEDGER') {
-    if (hit.type === 'ledger') faceLedgerCard(state.dueQueue[hit.index]);
-    else if (hit.type === 'skip') backToGames();
-  }
+  if (hit.type === 'game') pickGame(hit.index);
+  else if (hit.type === 'next') changePage(1);
+  else if (hit.type === 'prev') changePage(-1);
 });
 
 async function boot() {
@@ -163,15 +160,13 @@ async function boot() {
 }
 boot();
 
-// The "last candle" — if the cabin remembers you, the very first line is a
-// specific memory (how many debts wait), not a generic welcome.
+// If the cabin remembers you, greet by name and pre-fill it.
 function greetOnBoot() {
   const lu = lastUser();
   if (lu) {
     if (!$('username-input').value) $('username-input').value = lu;   // ?user= wins
-    const due = new Ledger(lu).due();
-    if (due.length) return speak(LINES.greetReturn(lu, due.length));
-    return speak(LINES.greetReturnClean(lu));
+    const n = sealedCount(lu);
+    return speak(n > 0 ? LINES.greetReturnSealed(lu, n) : LINES.greetReturn(lu));
   }
   speak(LINES.greetFirst);
 }
@@ -208,12 +203,10 @@ async function doFetch(name) {
     const games = await feed.page(0);
     if (!games.length) throw new Error("No games here. Are you sure that's the name?");
     state.username = name; state.feed = feed; state.page = 0; state.games = games;
-    state.ledger = new Ledger(name); rememberUser(name);
+    rememberUser(name);
     $('username-panel').hidden = true;
     $('btn-rename').hidden = false;
-    const due = state.ledger.due();
-    if (due.length) await enterLedger(due);
-    else await showGames(LINES.pickGame(name));
+    await showGames(LINES.pickGame(name));
   } catch (ex) {
     setPhase('ASK_USERNAME');
     err.textContent = ex.code === 404 ? `I know no soul named "${name}".` : (ex.message || 'The candle guttered — try again.');
@@ -229,98 +222,6 @@ async function showGames(line) {
   speak(line);
   paper.drawGameList(state.games, { page: state.page, hasMore: state.feed ? state.feed.hasMore(state.page) : false });
   host.leanIn(); await paper.slideIn(); await host.leanBack();
-}
-
-/* ─────────────────────── the ledger ────────────────────── */
-
-async function enterLedger(due) {
-  setPhase('LEDGER');
-  state.dueQueue = due.slice();
-  const rec = recurringTheme(state.ledger.cards);
-  speak(rec ? LINES.studying(rec.count, rec.theme) : LINES.settle);
-  paper.drawLedgerList(state.dueQueue);
-  host.leanIn(); await paper.slideIn(); await host.leanBack();
-}
-
-async function faceLedgerCard(card) {
-  if (!card || state.facingLedger) return;   // ignore a second click during the slide-out
-  state.facingLedger = true; state.currentCard = card;
-  sounds.tick();
-  await paper.slideOut();
-  loadLedgerPosition(card);
-}
-
-function loadLedgerPosition(card) {
-  const session = ++state.session;
-  const m = ledgerMoment(card);
-  state.moments = [m]; state.results = [null]; state.idx = 0;
-  state.stats = { first: 0, solved: 0, accepted: 0, revealed: 0, hints: 0, retries: 0 };
-  state.locked = true; state.playing = false; state.attempts = 0; state.hintUsed = false; state.replaying = false;
-  setPhase('QUIZ');
-  $('quiz-hud').hidden = false;
-  board.setOrientation(card.userColor);
-  $('hud-counter').innerHTML = `THE LEDGER <span class="pips"></span> move ${card.moveNumber}`;
-  $('hud-turn').textContent = (card.userColor === 'w' ? 'WHITE' : 'BLACK') + ' TO MOVE';
-  showEvalGraph(m);
-  board.setPosition(card.fen);
-  state.quiz = new Chess(card.fen);
-  restoreHighlights(m);
-  setButtons({ hint: true, idk: true });
-  speak(LINES.cardPick);
-  state.gaze = null;
-  state.locked = false;
-  if (session !== state.session) return;
-}
-
-// A ledger card wears the same shape as an analysis "moment", so the whole
-// quiz/judge machinery works on it unchanged.
-function ledgerMoment(card) {
-  return {
-    fen: card.fen, fenAfterPlayed: card.fenAfterPlayed,
-    bestUci: card.bestUci, bestSan: card.bestSan, playedUci: card.playedUci, playedSan: card.playedSan,
-    evalBest: card.evalBest, mateBest: card.mateBest, evalAfterPlayed: card.evalAfterPlayed, mateAfterPlayed: card.mateAfterPlayed,
-    userColor: card.userColor, moveNumber: card.moveNumber, severity: card.severity, prevMove: null,
-  };
-}
-
-// Grade the card the player just faced, then move to the next debt or the games.
-function judgeLedger(kind, m, uci, after) {
-  const to = uci.slice(2, 4);
-  const { x, y } = board.squareCenter(to);
-  const san = escapeText(uciToSan(m.fen, uci));
-  const clean = kind === 'best' && state.attempts === 1 && !state.hintUsed;
-  state.gaze = board.squareWorld(to, 0.4);
-  fillYours(m, after.score, after.mateIn, kind, san);
-  revealBestSan(m);
-
-  const laidToRest = state.ledger.grade(state.currentCard, clean);
-  if (kind === 'best') {
-    sparkle(x, y, 'ok', { power: 1.3 }); floatLabel(x, y, 'BEST', 'ok'); sounds.correct(); host.react('best');
-    speak(clean ? (laidToRest ? LINES.cardLearned : LINES.cardBest) : LINES.cardBest);
-    setFeedback(`<b>${san}</b>: BEST <span class="dim">${clean ? 'debt paid' : 'but not clean'}</span>`, 'ok');
-  } else {
-    const worse = kind === 'bad';
-    sparkle(x, y, worse ? 'bad' : 'warn', worse ? {} : { count: 14, power: 0.7 });
-    floatLabel(x, y, worse ? 'STILL OWED' : 'NOT CLEAN', worse ? 'bad' : 'warn');
-    sounds.wrong(); host.react(worse ? 'bad' : 'good');
-    const sameAsGame = uci === m.playedUci;
-    speak(sameAsGame ? LINES.cardSame : worse ? LINES.cardWorse : LINES.cardClose);
-    setFeedback(`<b>${san}</b>: ${sameAsGame ? 'THE SAME MOVE' : 'STILL OWED'} <span class="dim">back to tomorrow</span>`, worse ? 'bad' : 'warn');
-  }
-  setButtons({ next: true });
-}
-
-async function nextLedgerCard() {
-  state.dueQueue = state.dueQueue.filter((c) => c !== state.currentCard);
-  state.facingLedger = false; state.currentCard = null;
-  $('quiz-hud').hidden = true; hush();
-  if (state.dueQueue.length) {
-    setPhase('LEDGER');
-    paper.drawLedgerList(state.dueQueue);
-    host.leanIn(); await paper.slideIn(); await host.leanBack();
-  } else {
-    await showGames(LINES.ledgerDone);
-  }
 }
 
 // Page forward (older) / backward (newer) through the game feed.
@@ -359,13 +260,13 @@ async function startFixMistakes() {
   const game = state.game;
   setPhase('ANALYZING');
   await paper.slideOut();
-  speak("Let me <span class=\"q\">study</span> it…");
+  speak(LINES.studying);
   flareCandles();
   try {
     await state.engine.init();
     const { moments } = await analyzeGame(game, state.engine);
     if (!moments.length) {
-      speak('No real blunders here — you were just <span class="q">outplayed</span>. Pick another.');
+      speak('No real mistakes in this one. Pick another.');
       backToGames();
       return;
     }
@@ -378,7 +279,7 @@ async function startFixMistakes() {
 
 async function backToGames(line) {
   setPhase('PICK_GAME');
-  state.facingLedger = false; state.currentCard = null;
+  deck.reset();
   $('quiz-hud').hidden = true;
   $('review-hud').hidden = true;
   $('evalbar').hidden = true;
@@ -551,6 +452,7 @@ function startQuiz(moments) {
   state.idx = 0;
   state.results = new Array(moments.length).fill(null);
   state.stats = { first: 0, solved: 0, accepted: 0, revealed: 0, hints: 0, retries: 0 };
+  deck.build(moments);   // a card per mistake, stacked to the side of the board
   loadPuzzle(0);
 }
 
@@ -572,7 +474,7 @@ async function loadPuzzle(i) {
   $('hud-turn').textContent = '';
   showEvalGraph(m);
   setButtons({});
-  speak(i === 0 ? "Watch how it happened…" : 'And it continues…');
+  speak(i === 0 ? 'Watch how it went.' : 'It keeps going.');
   setFeedback('<span class="dim">click the board to skip ahead</span>', 'info');
 
   // play the game's actual moves, one by one, up to this critical position
@@ -605,7 +507,8 @@ async function loadPuzzle(i) {
   $('hud-turn').textContent = (m.userColor === 'w' ? 'WHITE' : 'BLACK') + ' TO MOVE';
   setFeedback('', '');
   setButtons({ hint: true, idk: true });
-  speak(`Move ${m.moveNumber}. Here is where it <span class="q">turned</span>. Show me the move you owed the position.`);
+  speak(LINES.critical(m.moveNumber));
+  deck.activate(i);   // draw this position's card up beside the board
   state.locked = false;
 }
 
@@ -661,7 +564,6 @@ async function handleUserMove({ from, to, promotion }) {
 }
 
 function judge(kind, m, uci, after) {
-  if (state.facingLedger) return judgeLedger(kind, m, uci, after);
   const to = uci.slice(2, 4);
   const { x, y } = board.squareCenter(to);
   const sameAsGame = uci === m.playedUci;
@@ -672,31 +574,32 @@ function judge(kind, m, uci, after) {
 
   if (kind === 'best') {
     revealBestSan(m);
+    deck.markSolved(state.idx);   // green arrow appears on the card
     sparkle(x, y, 'ok', { power: 1.3 }); floatLabel(x, y, 'BEST', 'ok'); sounds.correct(); host.react('best');
     if (!replay) {
       state.results[state.idx] = state.attempts === 1 ? 'first' : 'solved';
       state.attempts === 1 ? state.stats.first++ : state.stats.solved++;
       renderCounter();
     }
-    speak(state.attempts === 1 && !replay ? "That's the one. <span class=\"q\">Clever</span>." : 'There it is.');
+    speak(state.attempts === 1 && !replay ? LINES.bestFirst : LINES.best);
     setFeedback(`<b>${san}</b>: BEST <span class="dim">${replay ? 'again' : state.attempts === 1 ? 'first try' : 'in ' + state.attempts + ' tries'}</span>`, 'ok');
     setButtons({ next: true });
     return;
   }
   if (kind === 'great') {
     sparkle(x, y, 'great'); floatLabel(x, y, 'GREAT', 'great'); sounds.great(); host.react('great');
-    speak('Strong… but not the <span class="q">strongest</span>. Look again, or keep it.');
+    speak(LINES.great);
     setFeedback(`<b>${san}</b>: GREAT <span class="dim">not the best</span>`, 'great');
     setButtons(replay ? { retry: true, next: true } : { retry: true, accept: true, idk: true });
     return;
   }
   if (kind === 'good') {
     sparkle(x, y, 'warn', { count: 14, power: 0.7 }); floatLabel(x, y, 'INACCURATE', 'warn'); sounds.wrong(); host.react('good');
-    speak('It slips away. <span class="q">Again</span>.');
+    speak(LINES.inaccurate);
     setFeedback(`<b>${san}</b>: INACCURATE`, 'warn');
   } else {
     sparkle(x, y, 'bad'); floatLabel(x, y, sameAsGame ? 'AS BEFORE' : 'WORSE', 'bad'); sounds.wrong(); host.react('bad');
-    speak(sameAsGame ? "The same <span class=\"q\">mistake</span>. That's why we're here." : 'No — that makes it <span class="q">worse</span>.');
+    speak(sameAsGame ? LINES.same : LINES.worse);
     setFeedback(sameAsGame ? `<b>${san}</b>: YOUR GAME MOVE` : `<b>${san}</b>: WORSE`, 'bad');
   }
   if (replay) { setButtons({ retry: true, next: true }); return; }
@@ -722,21 +625,19 @@ function retryCurrent() {
   resetPuzzlePosition();
 }
 
-function nextPuzzle() {
-  if (state.facingLedger) return nextLedgerCard();
+async function nextPuzzle() {
+  const cur = state.idx;
+  await deck.sendToChest(cur);            // the card flies into the chest at the back
+  addSealed(state.username, 1);
   if (state.idx + 1 < state.moments.length) loadPuzzle(state.idx + 1);
   else completeSession();
 }
 
-// No verdict screen — when the game is finished, fold what you missed into the
-// ledger (so it comes back to you later) and return to the games paper.
+// No verdict screen — when the game is finished, return to the games paper.
 async function completeSession() {
   state.idx = state.moments.length;
   setFeedback('', '');
-  if (state.ledger && !state.facingLedger) {
-    try { state.ledger.recordGame(state.moments, state.results, state.game); } catch (e) { console.error('ledger write failed', e); }
-  }
-  await backToGames("That game's done. <span class=\"q\">Pick</span> another.");
+  await backToGames(LINES.gameDone);
 }
 
 /* ─────────────────────── reveal / hint ─────────────────── */
@@ -761,9 +662,9 @@ async function doReveal() {
   const { x, y } = board.squareCenter(to);
   sparkle(x, y, 'info'); floatLabel(x, y, m.bestSan, 'info');
   revealBestSan(m);
-  if (state.facingLedger) { state.ledger.grade(state.currentCard, false); }   // asked-for reveal = still owed
-  else if (state.results[state.idx] == null) { state.results[state.idx] = 'revealed'; state.stats.revealed++; renderCounter(); }
-  speak(state.facingLedger ? LINES.cardReveal(m.bestSan) : `I'd play <span class="q">${escapeText(m.bestSan)}</span>. Remember it.`);
+  deck.markSolved(state.idx);   // green arrow for the right move on the card
+  if (state.results[state.idx] == null) { state.results[state.idx] = 'revealed'; state.stats.revealed++; renderCounter(); }
+  speak(LINES.reveal(m.bestSan));
   setFeedback(`BEST <b>${escapeText(m.bestSan)}</b> ${formatEval(m.evalBest, m.mateBest, m.userColor)} <span class="dim">· you played ${escapeText(m.playedSan)}</span>`, 'info');
   setButtons({ next: true });
 }
@@ -850,7 +751,8 @@ $('btn-hint').addEventListener('click', () => {
 $('btn-idk').addEventListener('click', () => { if (state.locked) return; doReveal(); });
 $('btn-retry').addEventListener('click', () => { sounds.tick(); setFeedback('', ''); retryCurrent(); });
 $('btn-accept').addEventListener('click', () => {
-  state.results[state.idx] = 'accepted'; state.stats.accepted++; renderCounter(); sounds.great(); nextPuzzle();
+  state.results[state.idx] = 'accepted'; state.stats.accepted++; renderCounter();
+  deck.markSolved(state.idx); sounds.great(); nextPuzzle();
 });
 $('btn-next').addEventListener('click', () => { state.session++; nextPuzzle(); });
 
@@ -863,7 +765,7 @@ document.addEventListener('keydown', (e) => {
   if (state.phase !== 'QUIZ') return;
   if (state.playing) { state.skipPlayback = true; return; }
   if (!state.quiz) return;
-  if (e.key === 'ArrowLeft') { if (state.facingLedger) return; sounds.tick(); setFeedback('', ''); retryCurrent(); }
+  if (e.key === 'ArrowLeft') { sounds.tick(); setFeedback('', ''); retryCurrent(); }
   else if (e.key === 'ArrowRight') { if (!$('btn-next').hidden) $('btn-next').click(); }
 });
 
@@ -894,11 +796,10 @@ window.__rmc = {
   flip() { board.flip(); },
   submitUsername(name) { return doFetch(name); },
   changePage(d) { return changePage(d); },
-  get facingLedger() { return state.facingLedger; },
-  get dueCount() { return state.dueQueue ? state.dueQueue.length : 0; },
-  faceCard(i) { return faceLedgerCard(state.dueQueue[i]); },
-  skipLedger() { return backToGames(); },
-  ledgerCards(user) { return new Ledger(user || state.username).cards; },
+  get deckSize() { return deck.cards.length; },
+  get activeCard() { return deck.active; },
+  get cardSolved() { const c = deck.cards[deck.active]; return c ? c.solved : false; },
+  sealedCount(user) { return sealedCount(user || state.username); },
   pickGame(i) { return pickGame(i); },
   chooseMode(mode) { $('mode-overlay').hidden = true; return mode === 'review' ? startReview() : startFixMistakes(); },
   reviewForward() { reviewForward(); },

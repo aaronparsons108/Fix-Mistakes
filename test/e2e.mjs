@@ -87,6 +87,8 @@ try {
   check(total >= 1, 'analysis finds at least one blunder/mistake');
   await page.waitForFunction(() => !window.__rmc.busy, { timeout: 30000 }); // move-by-move playback finishes
   check(true, 'plays through the game to the critical position');
+  check(await page.evaluate(() => window.__rmc.deckSize === window.__rmc.results.length), 'a card is dealt for each mistake in the game');
+  check(await page.evaluate(() => window.__rmc.activeCard === 0), 'the first position card is drawn up beside the board');
   await page.screenshot({ path: SHOTS + 'cabin-3-quiz.png' });
 
   // REAL raycast move: play this puzzle's best move (whatever it is)
@@ -98,6 +100,7 @@ try {
   await page.mouse.click(to.x, to.y);
   await page.waitForFunction(() => window.__rmc.results[0] != null, { timeout: 30000 });
   check(await page.evaluate(() => window.__rmc.results[0] === 'first'), 'raycast click-to-move solves the best move first try');
+  check(await page.evaluate(() => window.__rmc.cardSolved === true), 'solving the position reveals the green best-move arrow on its card');
   await page.screenshot({ path: SHOTS + 'cabin-4-correct.png' });
 
   // ← retries even after solving, without re-scoring
@@ -130,6 +133,7 @@ try {
   await page.evaluate(() => window.__rmc.next());
   await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
   check(true, 'finishing a game returns to the games paper (no verdict screen)');
+  check(await page.evaluate((n) => window.__rmc.sealedCount('testuser') >= n, total), 'every solved position is sealed into the chest');
   await page.waitForTimeout(300);
   await page.screenshot({ path: SHOTS + 'cabin-6-done.png' });
 
@@ -168,34 +172,6 @@ try {
   await page.evaluate(() => document.getElementById('btn-rev-exit').click());
   await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
   check(true, 'leaving review returns to the games paper');
-
-  // ── The Ledger — spaced repetition of your own blunders ─────────
-  await page.evaluate(() => {
-    const card = {
-      fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
-      fenAfterPlayed: 'rnbqkbnr/pppp1ppp/8/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 2',
-      bestUci: 'g1f3', bestSan: 'Nf3', playedUci: 'd1h5', playedSan: 'Qh5',
-      evalBest: 30, mateBest: null, evalAfterPlayed: -20, mateAfterPlayed: null,
-      userColor: 'w', moveNumber: 2, severity: 'mistake',
-      opponent: 'trickster', gameUrl: '', theme: 'the opening slip',
-      createdAt: 0, box: 0, dueAt: 0, returnCount: 0, lastResult: 'new',
-    };
-    localStorage.setItem('rmc.ledger.testuser', JSON.stringify({ v: 1, cards: [card] }));
-  });
-  await page.evaluate(() => window.__rmc.submitUsername('testuser'));
-  await page.waitForFunction(() => window.__rmc.state === 'LEDGER', { timeout: 15000 });
-  check(await page.evaluate(() => window.__rmc.dueCount === 1), 'a returning player is met with the positions they still owe (LEDGER)');
-  await page.screenshot({ path: SHOTS + 'cabin-8-ledger.png' });
-
-  await page.evaluate(() => window.__rmc.faceCard(0));
-  await page.waitForFunction(() => window.__rmc.state === 'QUIZ' && window.__rmc.facingLedger && !window.__rmc.busy, { timeout: 15000 });
-  check(true, 'facing a ledger card drops you straight onto that exact position');
-  await page.evaluate(() => window.__rmc.playMove('g1', 'f3'));
-  await page.waitForTimeout(250);
-  check(await page.evaluate(() => window.__rmc.ledgerCards('testuser')[0].box === 1), 'solving a debt advances it up the spaced-repetition ladder');
-  await page.evaluate(() => window.__rmc.next());
-  await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
-  check(await page.evaluate(() => window.__rmc.dueCount === 0), 'clearing the ledger returns you to the living games');
 
   await browser.close();
 } catch (e) {
