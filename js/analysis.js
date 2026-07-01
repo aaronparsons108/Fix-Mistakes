@@ -9,10 +9,14 @@
 import { Chess } from '../lib/chess.js';
 
 const SKIP_OPENING_PLIES = 8;   // ignore book-move territory
-const SHALLOW = 11;             // pass 1 depth (every position)
-const DEEP = 15;                // pass 2 depth (only the suspects)
+const SHALLOW = 11;             // pass 1 depth (every position) — a fast filter
 const DEEP_MAX = 10;            // re-check at most this many suspects
-const SHALLOW_MS = 1500, DEEP_MS = 3000;
+const SHALLOW_MS = 1500;
+
+// Pass 2 (and move-grading) use a fixed NODE budget rather than a time budget so
+// the "best move" and every eval are reproducible — the same position always
+// scores the same, instead of drifting with CPU load. Bump this for more depth.
+export const ANALYSIS_NODES = 2500000;
 
 // win% loss thresholds (0..100), tuned to chess.com's labels
 const BLUNDER_W = 20;
@@ -44,7 +48,7 @@ export async function analyzeGame(game, engine, { onProgress = () => {} } = {}) 
   let done = 0;
   for (let i = SKIP_OPENING_PLIES; i <= moves.length; i++) {
     const fen = i < moves.length ? moves[i].before : moves[moves.length - 1].after;
-    evals[i] = await evaluatePosition(fen, engine, SHALLOW, SHALLOW_MS);
+    evals[i] = await evaluatePosition(fen, engine, { depth: SHALLOW, movetime: SHALLOW_MS });
     onProgress(++done, estTotal);
   }
 
@@ -69,9 +73,9 @@ export async function analyzeGame(game, engine, { onProgress = () => {} } = {}) 
   // ── pass 2: deep re-eval of each suspect's before/after to confirm ──
   const deep = [];
   for (const s of suspects) {
-    const before = await evaluatePosition(s.mv.before, engine, DEEP, DEEP_MS);
+    const before = await evaluatePosition(s.mv.before, engine, { nodes: ANALYSIS_NODES, fresh: true });
     onProgress(++done, estTotal);
-    const after = await evaluatePosition(s.mv.after, engine, DEEP, DEEP_MS);
+    const after = await evaluatePosition(s.mv.after, engine, { nodes: ANALYSIS_NODES, fresh: true });
     onProgress(++done, estTotal);
     if (!before.bestMove) continue;
     if (s.playedUci === before.bestMove) continue; // deeper search agrees it was best
@@ -109,7 +113,7 @@ export async function analyzeGame(game, engine, { onProgress = () => {} } = {}) 
   return { moments: moments.slice(0, MAX_MOMENTS), totalMoves: moves.length };
 }
 
-async function evaluatePosition(fen, engine, depth, movetime) {
+async function evaluatePosition(fen, engine, opts) {
   const chess = new Chess(fen);
   if (chess.isCheckmate()) {
     const score = fen.split(' ')[1] === 'w' ? -9990 : 9990;
@@ -118,7 +122,7 @@ async function evaluatePosition(fen, engine, depth, movetime) {
   if (chess.isDraw() || chess.isStalemate()) {
     return { bestMove: null, score: 0, mateIn: null, terminal: true };
   }
-  return engine.evaluate(fen, { depth, movetime });
+  return engine.evaluate(fen, opts);
 }
 
 export function uciToSan(fen, uci) {

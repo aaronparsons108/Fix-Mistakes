@@ -43,6 +43,9 @@ export class Engine {
           clearTimeout(timer);
           worker.onerror = null;
           this.worker = worker;
+          // NB: this build is already single-threaded; sending a Threads
+          // setoption wedges it (no readyok), so we don't. Reproducibility comes
+          // from the fixed node budget + Clear Hash on each search instead.
           worker.postMessage('isready');
           resolve();
         }
@@ -54,19 +57,28 @@ export class Engine {
   // Evaluate a FEN. Resolves with:
   //   { bestMove: 'e2e4', score: <cp, white perspective>, mateIn: <moves or null, white perspective sign>, raw }
   // Searches are serialized through a queue since UCI is stateful.
-  evaluate(fen, { depth = 12, movetime = 2500 } = {}) {
-    const job = this._queue.then(() => this._search(fen, depth, movetime));
+  //
+  // Options:
+  //   nodes   — search a FIXED number of nodes instead of a wall-clock budget.
+  //             A time budget makes the result depend on how far the search got
+  //             before the clock ran out, so the same position scores
+  //             differently every run; a node budget is fully reproducible.
+  //   fresh   — clear the hash first, so a repeat search of the same position
+  //             can't be nudged by leftover state from earlier searches.
+  evaluate(fen, { depth = 12, movetime = 2500, nodes = null, fresh = false } = {}) {
+    const job = this._queue.then(() => this._search(fen, { depth, movetime, nodes, fresh }));
     // keep the queue alive even if a job rejects
     this._queue = job.catch(() => {});
     return job;
   }
 
-  _search(fen, depth, movetime) {
+  _search(fen, { depth, movetime, nodes, fresh }) {
     return new Promise(async (resolve, reject) => {
       await this.init();
       const whiteToMove = fen.split(' ')[1] === 'w';
       let last = null; // last full info line parsed
-      const timer = setTimeout(() => reject(new Error('engine search timed out')), movetime + 20000);
+      const ceiling = nodes ? 60000 : movetime + 20000; // hard timeout so a hang can't wedge the queue
+      const timer = setTimeout(() => reject(new Error('engine search timed out')), ceiling);
 
       this.worker.onmessage = (e) => {
         const line = String(e.data);
@@ -101,8 +113,9 @@ export class Engine {
         }
       };
 
+      if (fresh) this.worker.postMessage('setoption name Clear Hash');
       this.worker.postMessage('position fen ' + fen);
-      this.worker.postMessage(`go depth ${depth} movetime ${movetime}`);
+      this.worker.postMessage(nodes ? `go nodes ${nodes}` : `go depth ${depth} movetime ${movetime}`);
     });
   }
 

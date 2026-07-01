@@ -69,6 +69,12 @@ try {
   await page.evaluate(() => window.__rmc.setLamp(0.45));
   await page.screenshot({ path: SHOTS + 'cabin-1-boot.png' });
 
+  // the same position must score identically every time (no time-based drift)
+  const FEN = 'r1bqk2r/pp1n1ppp/2pbpn2/8/2BP4/2N1PN2/PP3PPP/R1BQK2R w KQkq - 0 8';
+  const d1 = await page.evaluate((f) => window.__rmc.evalFen(f, { nodes: 200000, fresh: true }), FEN);
+  const d2 = await page.evaluate((f) => window.__rmc.evalFen(f, { nodes: 200000, fresh: true }), FEN);
+  check(d1.score === d2.score && d1.bestMove === d2.bestMove, `the engine is deterministic (${d1.bestMove} ${d1.score} == ${d2.bestMove} ${d2.score})`);
+
   // username -> paper of games
   await page.evaluate(() => window.__rmc.submitUsername('testuser'));
   await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });

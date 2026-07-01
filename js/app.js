@@ -7,7 +7,7 @@ import * as THREE from '../lib/three/three.module.js';
 import { Chess } from '../lib/chess.js';
 import { Engine, formatEval } from './engine.js';
 import { fetchPlayer, openGameFeed } from './chesscom.js';
-import { analyzeGame, parseGame, uciToSan } from './analysis.js';
+import { analyzeGame, parseGame, uciToSan, ANALYSIS_NODES } from './analysis.js';
 import { lastUser, rememberUser, sealedCount, addSealed } from './store.js';
 import { initScene, scene, camera, onFrame, flareCandles, setLampControl, getLampControl, getRopeKnob } from './scene.js';
 import { Board3D } from './board3d.js';
@@ -22,7 +22,6 @@ import { floatLabel, sparkle, speak, hush, toast, askPromotion, tickSpeech } fro
 
 const $ = (id) => document.getElementById(id);
 
-const JUDGE_DEPTH = 15;   // match the deep analysis pass when scoring attempts
 const BEST_TOL = 25, GREAT_TOL = 80, GOOD_TOL = 160;
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
@@ -555,7 +554,9 @@ async function handleUserMove({ from, to, promotion }) {
 
   setFeedback('<span class="dim">he ponders…</span>', 'info');
   let after;
-  try { after = await state.engine.evaluate(state.quiz.fen(), { depth: JUDGE_DEPTH }); }
+  // Same fixed-node search the analysis used, so the verdict is reproducible and
+  // compares like-for-like against the stored best-move eval.
+  try { after = await state.engine.evaluate(state.quiz.fen(), { nodes: ANALYSIS_NODES, fresh: true }); }
   catch { after = { score: -9999 * userPersp, mateIn: null }; }
   if (session !== state.session) return;
   const diff = (m.evalBest - after.score) * userPersp;
@@ -792,6 +793,7 @@ window.__rmc = {
   },
   get lamp() { return getLampControl(); },
   setLamp(t) { setLampControl(t); },
+  evalFen(fen, opts) { return state.engine.evaluate(fen, opts); },
   get orientation() { return board.orientation; },
   flip() { board.flip(); },
   submitUsername(name) { return doFetch(name); },
