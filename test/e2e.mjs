@@ -159,9 +159,43 @@ try {
   await page.waitForTimeout(100);
   check(await page.evaluate(() => window.__rmc.review.branched && window.__rmc.review.san === 'Nc3'), 'playing a different move branches into your own line');
 
+  // back onto the last game move, then forward must re-enter the GAME line
+  await page.evaluate(() => window.__rmc.reviewBack());
+  check(await page.evaluate(() => window.__rmc.review.ply === 2 && !window.__rmc.review.branched), 'backing onto a game move clears the branch');
+  await page.evaluate(() => window.__rmc.reviewForward());
+  check(await page.evaluate(() => window.__rmc.review.san === 'Nf3' && !window.__rmc.review.branched), 'forward re-enters the game line after branching');
+
   await page.evaluate(() => document.getElementById('btn-rev-exit').click());
   await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
   check(true, 'leaving review returns to the games paper');
+
+  // ── The Ledger — spaced repetition of your own blunders ─────────
+  await page.evaluate(() => {
+    const card = {
+      fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+      fenAfterPlayed: 'rnbqkbnr/pppp1ppp/8/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 2',
+      bestUci: 'g1f3', bestSan: 'Nf3', playedUci: 'd1h5', playedSan: 'Qh5',
+      evalBest: 30, mateBest: null, evalAfterPlayed: -20, mateAfterPlayed: null,
+      userColor: 'w', moveNumber: 2, severity: 'mistake',
+      opponent: 'trickster', gameUrl: '', theme: 'the opening slip',
+      createdAt: 0, box: 0, dueAt: 0, returnCount: 0, lastResult: 'new',
+    };
+    localStorage.setItem('rmc.ledger.testuser', JSON.stringify({ v: 1, cards: [card] }));
+  });
+  await page.evaluate(() => window.__rmc.submitUsername('testuser'));
+  await page.waitForFunction(() => window.__rmc.state === 'LEDGER', { timeout: 15000 });
+  check(await page.evaluate(() => window.__rmc.dueCount === 1), 'a returning player is met with the positions they still owe (LEDGER)');
+  await page.screenshot({ path: SHOTS + 'cabin-8-ledger.png' });
+
+  await page.evaluate(() => window.__rmc.faceCard(0));
+  await page.waitForFunction(() => window.__rmc.state === 'QUIZ' && window.__rmc.facingLedger && !window.__rmc.busy, { timeout: 15000 });
+  check(true, 'facing a ledger card drops you straight onto that exact position');
+  await page.evaluate(() => window.__rmc.playMove('g1', 'f3'));
+  await page.waitForTimeout(250);
+  check(await page.evaluate(() => window.__rmc.ledgerCards('testuser')[0].box === 1), 'solving a debt advances it up the spaced-repetition ladder');
+  await page.evaluate(() => window.__rmc.next());
+  await page.waitForFunction(() => window.__rmc.state === 'PICK_GAME', { timeout: 15000 });
+  check(await page.evaluate(() => window.__rmc.dueCount === 0), 'clearing the ledger returns you to the living games');
 
   await browser.close();
 } catch (e) {

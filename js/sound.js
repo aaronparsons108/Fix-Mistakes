@@ -34,6 +34,18 @@ export const sounds = {
   reveal()  { if (!muted) [880, 1175].forEach((f, i) => tone(f, { time: i * 0.12, dur: 0.3, type: 'sine', vol: 0.13 })); },
   fanfare() { if (!muted) [392, 523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, { time: i * 0.11, dur: 0.34, type: 'triangle', vol: 0.15 })); },
   tick()    { if (!muted) tone(900, { dur: 0.04, type: 'sine', vol: 0.06 }); },
+
+  // one short chiptune "syllable" — the host's 8-bit voice, one blip per letter
+  // as his words type out. Low + gravelly to suit a big green pawn. Pitch wanders
+  // by letter so a sentence sounds like speech, not a metronome.
+  blip(ch) {
+    if (muted) return;
+    const code = (typeof ch === 'string' && ch ? ch.toLowerCase().charCodeAt(0) : 110);
+    const semis = (code % 5) - 2;                 // -2..+2 semitones
+    const f = 150 * Math.pow(2, semis / 12);      // ~130-170 Hz, a growly baritone
+    tone(f, { dur: 0.05, type: 'square', vol: 0.05 });
+    tone(f * 2.01, { dur: 0.035, type: 'square', vol: 0.02 }); // faint upper harmonic
+  },
 };
 
 export function toggleMute() {

@@ -115,6 +115,35 @@ export class Paper {
     this.tex.needsUpdate = true;
   }
 
+  // The ledger of owed positions — the ones you couldn't fix, come back to haunt.
+  drawLedgerList(cards) {
+    this._bg(); this._title('The ledger');
+    const x = this.ctx; this.lineBoxes = [];
+    const items = cards.slice(0, 5);
+    items.forEach((c, i) => {
+      const y = 142 + i * 74;
+      this.lineBoxes.push({ y0: y - 32, y1: y + 38, type: 'ledger', index: i });
+      x.fillStyle = i % 2 ? 'rgba(90,50,40,0.10)' : 'rgba(90,50,40,0.05)';
+      x.fillRect(34, y - 32, CW - 68, 68);
+      x.fillStyle = '#2c1814'; x.font = "27px 'IM Fell English', Georgia, serif";
+      x.fillText(`vs ${c.opponent} · move ${c.moveNumber}`, 50, y - 2);
+      x.fillStyle = '#7a2618'; x.font = "20px 'Special Elite', monospace";
+      x.fillText(c.theme || 'a mistake', 50, y + 24);
+      if (c.returnCount >= 2) {
+        x.fillStyle = '#5a4632'; x.textAlign = 'right'; x.font = "italic 18px 'IM Fell English', serif";
+        x.fillText(`×${c.returnCount}`, CW - 52, y + 24);
+        x.textAlign = 'left';
+      }
+    });
+    // the always-available way out
+    const ny = 142 + items.length * 74 + 18;
+    this.lineBoxes.push({ y0: ny - 22, y1: ny + 22, type: 'skip' });
+    x.fillStyle = '#3a2c1d'; x.font = "22px 'Special Elite', monospace"; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('go on to new games ›', CW / 2, ny);
+    x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    this.tex.needsUpdate = true;
+  }
+
   async slideIn() {
     this.mesh.visible = true; this.hidden = false;
     this.mesh.position.set(0, 1.0, -4.0);   // start low near the host
@@ -143,6 +172,6 @@ export class Paper {
     const box = this.lineBoxes.find((b) =>
       py >= b.y0 && py <= b.y1 && (b.x0 === undefined || (px >= b.x0 && px <= b.x1)));
     if (!box) return null;
-    return box.type === 'game' ? { type: 'game', index: box.index } : { type: box.type };
+    return (box.type === 'game' || box.type === 'ledger') ? { type: box.type, index: box.index } : { type: box.type };
   }
 }

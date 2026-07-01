@@ -25,10 +25,11 @@ export class FlipButton {
     this._capY = 0.3;
 
     const label = new THREE.Mesh(
-      new THREE.CircleGeometry(0.48, 28),
+      new THREE.CircleGeometry(0.46, 28),
       new THREE.MeshBasicMaterial({ map: this._labelTexture(), transparent: true, toneMapped: false, depthWrite: false })
     );
-    label.rotation.x = -Math.PI / 2; label.position.y = 0.481; this.cap.add(label);
+    // sit the text right on the cap's top face (cap is 0.36 tall, so top = +0.18)
+    label.rotation.x = -Math.PI / 2; label.position.y = 0.19; this.cap.add(label);
 
     // a wire trailing from the base off toward the floor
     const curve = new THREE.CatmullRomCurve3([
@@ -48,7 +49,8 @@ export class FlipButton {
     const c = document.createElement('canvas'); c.width = c.height = 128;
     const x = c.getContext('2d');
     x.clearRect(0, 0, 128, 128);
-    x.fillStyle = '#fff'; x.font = 'bold 36px Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#fff'; x.font = 'bold 44px Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.shadowColor = 'rgba(0,0,0,0.5)'; x.shadowBlur = 4;
     x.fillText('FLIP', 64, 66);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   }

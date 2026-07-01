@@ -145,6 +145,7 @@ body {
 .hud-feedback.info { color: #3a4a66; }
 /* eval comparison bars: GAME (what you played) · BEST · YOURS */
 .hud-graph { display: flex; flex-direction: column; gap: 5px; margin: 4px 0 2px; }
+.hg-head { font-family: 'Fell', serif; font-style: italic; font-size: 13px; color: #7a5a34; text-align: center; letter-spacing: 1px; margin-bottom: 2px; border-bottom: 1px solid rgba(107,83,49,0.35); padding-bottom: 3px; }
 .hg-row { display: grid; grid-template-columns: 58px 1fr 42px; align-items: center; gap: 7px; }
 .hg-id { display: flex; flex-direction: column; line-height: 1.05; }
 .hg-label { font-family: 'Typewriter', monospace; font-size: 9px; letter-spacing: 1.5px; color: #6a5430; }

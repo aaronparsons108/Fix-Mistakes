@@ -1,6 +1,9 @@
 // Thin HTML-overlay helpers that dress the WebGL world: host speech, floating
 // verdict labels, ember sparkles, promotion picker, toast.
 
+import { sounds } from './sound.js';
+import { FAST } from './tween.js';
+
 const $ = (id) => document.getElementById(id);
 const fxLayer = () => $('fx');
 
@@ -45,16 +48,46 @@ export function sparkle(x, y, kind = 'ember', { count = 22, power = 1 } = {}) {
   }
 }
 
-let speechTimer = null;
+// The host "speaks": his words type out one letter at a time with an 8-bit
+// blip per letter (Undertale/Inscryption style). HTML tags & entities in `html`
+// are emitted whole so highlight spans stay intact. The reveal is driven by the
+// scene's rAF loop (via tickSpeech) rather than setInterval, so it isn't subject
+// to background-timer throttling.
+let speechTimer = null, speech = null;
+const TYPE_MS = 26; // ms per revealed character
+
 export function speak(html, { hold = 0 } = {}) {
-  const box = $('host-speech');
-  $('speech-text').innerHTML = html;
+  const box = $('host-speech'), el = $('speech-text');
   box.hidden = false;
   box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
-  clearTimeout(speechTimer);
-  if (hold > 0) speechTimer = setTimeout(() => { box.hidden = true; }, hold);
+  clearTimeout(speechTimer); speech = null;
+
+  if (FAST.on) { el.innerHTML = html; if (hold > 0) speechTimer = setTimeout(() => { box.hidden = true; }, hold); return; }
+
+  el.innerHTML = '';
+  speech = { html, i: 0, shown: '', blips: 0, acc: 0, hold, held: false };
 }
-export function hush() { $('host-speech').hidden = true; }
+
+// Advance the typewriter; call once per animation frame with the frame's dt (s).
+export function tickSpeech(dtSeconds) {
+  const s = speech; if (!s) return;
+  if (s.i >= s.html.length) {
+    if (s.hold > 0 && !s.held) { s.held = true; speechTimer = setTimeout(() => { $('host-speech').hidden = true; }, s.hold); }
+    return;
+  }
+  s.acc += dtSeconds * 1000;
+  let advanced = false;
+  while (s.acc >= TYPE_MS && s.i < s.html.length) {
+    s.acc -= TYPE_MS;
+    const c = s.html[s.i];
+    if (c === '<') { const j = s.html.indexOf('>', s.i); if (j < 0) { s.shown += c; s.i++; } else { s.shown += s.html.slice(s.i, j + 1); s.i = j + 1; } }
+    else if (c === '&') { const j = s.html.indexOf(';', s.i), k = j < 0 ? s.i : j; s.shown += s.html.slice(s.i, k + 1); s.i = k + 1; }
+    else { s.shown += c; s.i++; if (c !== ' ' && s.blips++ < 60) sounds.blip(c); }
+    advanced = true;
+  }
+  if (advanced) $('speech-text').innerHTML = s.shown;
+}
+export function hush() { speech = null; $('host-speech').hidden = true; }
 
 export function toast(msg, ms = 4200) {
   const t = $('toast');
