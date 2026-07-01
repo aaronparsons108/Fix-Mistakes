@@ -116,10 +116,76 @@ export class Board3D {
   _spawn(sq, color, type) {
     const g = makePiece(type, color);
     g.position.copy(this._sqLocal(sq));
+    if (this._piecesHidden) g.visible = false;   // blindfold: stay invisible
     this.group.add(g);
     this.pieceAt.set(sq, g);
     return g;
   }
+
+  // Blindfold: make every piece invisible (squares + highlights still show).
+  setPiecesVisible(v) {
+    this._piecesHidden = !v;
+    for (const g of this.pieceAt.values()) g.visible = v;
+  }
+
+  /* ── Board Shaker helpers ───────────────────────────── */
+
+  // Fling every piece off the board with a tumbling arc, and give the board a
+  // quick comedic shake. Resolves once the pieces are gone.
+  shakeOff(rand = Math.random) {
+    const pieces = [...this.pieceAt.values()];
+    this.pieceAt.clear(); this.clearHighlights(); this.clearSelection();
+    const baseZ = this.group.rotation.z;
+    tween({ ms: 520, ease: 'linear', onUpdate: (v) => { this.group.rotation.z = baseZ + Math.sin(v * 46) * 0.06 * (1 - v); } })
+      .then(() => { this.group.rotation.z = baseZ; });
+    const proms = pieces.map((g) => {
+      const ang = rand() * Math.PI * 2, dist = 6 + rand() * 7, up = 3 + rand() * 3;
+      const dx = Math.cos(ang) * dist, dz = Math.sin(ang) * dist;
+      const spin = new THREE.Vector3(rand() * 12 - 6, rand() * 12 - 6, rand() * 12 - 6);
+      const p0 = g.position.clone();
+      return tween({
+        ms: 780 + rand() * 320, ease: 'easeOutCubic',
+        onUpdate: (v) => {
+          g.position.set(p0.x + dx * v, p0.y + up * Math.sin(v * Math.PI) - v * 3, p0.z + dz * v);
+          g.rotation.set(spin.x * v, spin.y * v, spin.z * v);
+          g.scale.setScalar(Math.max(0.001, 1 - v * 0.7));
+        },
+      }).then(() => this.group.remove(g));
+    });
+    return Promise.all(proms);
+  }
+
+  // A single piece hovering in front of the board, waiting to be placed back.
+  floatPiece(color, type) {
+    this.removeFloating();
+    const g = makePiece(type, color);
+    g.position.set(0, 2.4, 3.3);
+    this._floating = g; this._floatBaseY = 2.4;
+    this.group.add(g);
+    return g;
+  }
+
+  removeFloating() {
+    if (this._floating) { this.group.remove(this._floating); this._floating = null; }
+  }
+
+  // Drop the floating piece onto a square (a correct placement in the shaker).
+  dropFloatingTo(sq) {
+    const g = this._floating; if (!g) return Promise.resolve();
+    this._floating = null;
+    const dest = this._sqLocal(sq); const p0 = g.position.clone();
+    this.pieceAt.set(sq, g);
+    return tween({
+      ms: 300, ease: 'easeInQuad',
+      onUpdate: (v) => {
+        g.position.set(p0.x + (dest.x - p0.x) * v, p0.y + (dest.y - p0.y) * v + Math.sin(v * Math.PI) * 0.3, p0.z + (dest.z - p0.z) * v);
+        g.rotation.set(0, 0, 0); g.scale.setScalar(1);
+      },
+    });
+  }
+
+  // Public raycast: which square is under this screen point?
+  squareFromClient(x, y) { return this._squareFromEvent(x, y); }
 
   /* ── animated move ──────────────────────────────────── */
   move(from, to, promotion) {
@@ -217,6 +283,7 @@ export class Board3D {
 
   pulse(t) {
     for (const h of this.fx) if (h.mesh.userData.pulse) h.mesh.material.opacity = 0.3 + 0.35 * (0.5 + 0.5 * Math.sin(t * 5));
+    if (this._floating) this._floating.position.y = this._floatBaseY + Math.sin(t * 3) * 0.12;
   }
 
   hasHighlight(cls) { return this.fx.some((h) => h.cls === cls); }
@@ -262,6 +329,7 @@ export class Board3D {
   _select(sq) {
     this.clearSelection();
     this.selected = sq;
+    if (this.showHints === false) return;   // blindfold: no selection glow or dots
     this.highlight(sq, 'sel');
     const seen = new Set();
     for (const mv of this.opts.getLegalMoves?.(sq) || []) {

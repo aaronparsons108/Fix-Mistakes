@@ -65,14 +65,17 @@ export class Engine {
   //             differently every run; a node budget is fully reproducible.
   //   fresh   — clear the hash first, so a repeat search of the same position
   //             can't be nudged by leftover state from earlier searches.
-  evaluate(fen, { depth = 12, movetime = 2500, nodes = null, fresh = false } = {}) {
-    const job = this._queue.then(() => this._search(fen, { depth, movetime, nodes, fresh }));
+  //   skill   — Stockfish Skill Level (0..20). Defaults to 20 (full strength),
+  //             and it is set before every search, so a weakened Blindfold game
+  //             can never leave the analysis engine dumbed down.
+  evaluate(fen, { depth = 12, movetime = 2500, nodes = null, fresh = false, skill = 20 } = {}) {
+    const job = this._queue.then(() => this._search(fen, { depth, movetime, nodes, fresh, skill }));
     // keep the queue alive even if a job rejects
     this._queue = job.catch(() => {});
     return job;
   }
 
-  _search(fen, { depth, movetime, nodes, fresh }) {
+  _search(fen, { depth, movetime, nodes, fresh, skill }) {
     return new Promise(async (resolve, reject) => {
       await this.init();
       const whiteToMove = fen.split(' ')[1] === 'w';
@@ -113,6 +116,7 @@ export class Engine {
         }
       };
 
+      if (skill != null) this.worker.postMessage(`setoption name Skill Level value ${skill}`);
       if (fresh) this.worker.postMessage('setoption name Clear Hash');
       this.worker.postMessage('position fen ' + fen);
       this.worker.postMessage(nodes ? `go nodes ${nodes}` : `go depth ${depth} movetime ${movetime}`);

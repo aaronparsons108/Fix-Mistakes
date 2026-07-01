@@ -61,13 +61,16 @@ try {
   await page.route('**/fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }));
 
   await page.goto(`http://127.0.0.1:${PORT}/`);
-  await page.waitForFunction(() => window.__rmc && window.__rmc.state === 'ASK_USERNAME', { timeout: 15000 });
+  await page.waitForFunction(() => window.__rmc && window.__rmc.state === 'START', { timeout: 15000 });
   await page.evaluate(() => { window.__rmc.fastForward = true; });
-  check(true, 'boots straight into the cabin (ASK_USERNAME)');
+  check(true, 'boots into the start menu (START)');
   await page.evaluate(() => window.__rmc.setLamp(0.9));
   check(await page.evaluate(() => Math.abs(window.__rmc.lamp - 0.9) < 0.01), 'pull-rope drives the lamp brightness');
   await page.evaluate(() => window.__rmc.setLamp(0.45));
   await page.screenshot({ path: SHOTS + 'cabin-1-boot.png' });
+  await page.evaluate(() => window.__rmc.chooseTrack('study'));
+  await page.waitForFunction(() => window.__rmc.state === 'ASK_USERNAME', { timeout: 15000 });
+  check(true, 'Study Games leads to the username prompt');
 
   // the same position must score identically every time (no time-based drift)
   const FEN = 'r1bqk2r/pp1n1ppp/2pbpn2/8/2BP4/2N1PN2/PP3PPP/R1BQK2R w KQkq - 0 8';
@@ -202,6 +205,47 @@ try {
   await page.evaluate(() => document.getElementById('btn-rename').click());
   await page.waitForFunction(() => window.__rmc.state === 'ASK_USERNAME', { timeout: 15000 });
   check(await page.evaluate(() => window.__rmc.deckSize === 0 && !window.__rmc.evalBarShown), 'editing the name mid-session clears the cards and eval bar');
+
+  // ── Mental Challenges: start menu → mental track → picker ────────
+  await page.evaluate(() => { document.getElementById('start-overlay').hidden = false; window.__rmc.chooseTrack('mental'); });
+  await page.waitForFunction(() => window.__rmc.state === 'ASK_USERNAME', { timeout: 15000 });
+  await page.evaluate(() => window.__rmc.submitUsername('testuser'));
+  await page.waitForFunction(() => window.__rmc.state === 'MENTAL_MODE', { timeout: 15000 });
+  check(true, 'Mental Challenges asks the name then offers the two modes (MENTAL_MODE)');
+
+  // Board Shaker — win by placing every piece on its true square
+  await page.evaluate(() => window.__rmc.chooseMental('shaker'));
+  await page.waitForFunction(() => window.__rmc.state === 'SHAKER_PLACE', { timeout: 15000 });
+  check(true, 'Board Shaker flings the board and asks you to rebuild it');
+  await page.screenshot({ path: SHOTS + 'cabin-9-shaker.png' });
+  // place each requested piece on its correct square
+  for (let g = 0; g < 20; g++) {
+    const cur = await page.evaluate(() => window.__rmc.shakerCurrent);
+    if (!cur || await page.evaluate(() => window.__rmc.shakerDone)) break;
+    await page.evaluate((sq) => window.__rmc.shakerPlace(sq), cur.sq);
+    await page.waitForTimeout(20);
+  }
+  check(await page.evaluate(() => window.__rmc.shakerDone && !window.__rmc.shakerLost), 'placing every piece correctly wins the shaker');
+
+  // Board Shaker — a wrong placement loses instantly
+  await page.evaluate(() => document.getElementById('btn-challenge-retry').click());
+  await page.waitForFunction(() => window.__rmc.state === 'SHAKER_PLACE', { timeout: 15000 });
+  const wrongSq = await page.evaluate(() => { const s = window.__rmc.shakerCurrent.sq; let t; do { t = 'abcdefgh'[Math.floor(Math.random() * 8)] + (1 + Math.floor(Math.random() * 8)); } while (t === s); return t; });
+  await page.evaluate((sq) => window.__rmc.shakerPlace(sq), wrongSq);
+  await page.waitForTimeout(50);
+  check(await page.evaluate(() => window.__rmc.shakerLost), 'a wrong placement loses the shaker instantly');
+
+  // Blindfolded Mode — pieces hidden, red tint, engine replies
+  await page.evaluate(() => document.getElementById('btn-challenge-exit').click());
+  await page.waitForFunction(() => window.__rmc.state === 'MENTAL_MODE', { timeout: 15000 });
+  await page.evaluate(() => window.__rmc.chooseMental('blind'));
+  await page.waitForFunction(() => window.__rmc.state === 'BLIND', { timeout: 15000 });
+  await page.waitForFunction(() => window.__rmc.blindShown && window.__rmc.blindHidden, { timeout: 15000 });
+  check(true, 'Blindfolded mode hides the pieces and turns the board red');
+  await page.screenshot({ path: SHOTS + 'cabin-10-blind.png' });
+  await page.evaluate(() => window.__rmc.blindMove('e2', 'e4'));
+  await page.waitForFunction(() => window.__rmc.blindTurn && window.__rmc.blindHidden, { timeout: 30000 });
+  check(await page.evaluate(() => document.querySelector('#webgl') && window.__rmc.blindHidden), 'you can move blind and the pawn replies (pieces stay hidden)');
 
   await browser.close();
 } catch (e) {

@@ -55,6 +55,9 @@ const state = {
   allMoves: [], playing: false, skipPlayback: false,
   feed: null, page: 0,              // paginated game feed
   rev: null, evalSession: 0,        // simple-review state
+  track: null,                      // 'study' | 'mental'
+  blind: null, blindColor: 'w', blindTurn: false, blindLocked: false, blindSkill: 8, blindOver: false,
+  shaker: null, lastChallenge: null,
 };
 
 let board, host, paper, deck;
@@ -65,12 +68,17 @@ const headless = navigator.webdriver === true || new URLSearchParams(location.se
 const canvas = $('webgl');
 initScene(canvas, { headless });
 board = new Board3D(scene, camera, {
-  canMove: () => (state.phase === 'QUIZ' && !state.locked) || state.phase === 'REVIEW',
+  canMove: () => (state.phase === 'QUIZ' && !state.locked) || state.phase === 'REVIEW'
+    || (state.phase === 'BLIND' && state.blindTurn && !state.blindLocked),
   getLegalMoves: (sq) => {
-    const c = state.phase === 'REVIEW' ? state.rev?.chess : state.quiz;
+    const c = state.phase === 'REVIEW' ? state.rev?.chess : state.phase === 'BLIND' ? state.blind : state.quiz;
     return c ? c.moves({ square: sq, verbose: true }) : [];
   },
-  onUserMove: (m) => (state.phase === 'REVIEW' ? reviewPlayMove(m) : handleUserMove(m)),
+  onUserMove: (m) => {
+    if (state.phase === 'REVIEW') return reviewPlayMove(m);
+    if (state.phase === 'BLIND') return blindUserMove(m);
+    return handleUserMove(m);
+  },
 });
 board.setOrientation('w');
 host = new Host(scene);
@@ -138,12 +146,16 @@ canvas.addEventListener('pointerdown', () => { if (state.playing) state.skipPlay
 
 // pick games / page through the parchment
 canvas.addEventListener('click', (e) => {
-  if (state.phase !== 'PICK_GAME') return;
-  const hit = paper.pick(e.clientX, e.clientY);
-  if (!hit) return;
-  if (hit.type === 'game') pickGame(hit.index);
-  else if (hit.type === 'next') changePage(1);
-  else if (hit.type === 'prev') changePage(-1);
+  if (state.phase === 'PICK_GAME') {
+    const hit = paper.pick(e.clientX, e.clientY);
+    if (!hit) return;
+    if (hit.type === 'game') pickGame(hit.index);
+    else if (hit.type === 'next') changePage(1);
+    else if (hit.type === 'prev') changePage(-1);
+  } else if (state.phase === 'SHAKER_PLACE') {
+    const sq = board.squareFromClient(e.clientX, e.clientY);
+    if (sq) placeShakerPiece(sq);
+  }
 });
 
 async function boot() {
@@ -152,12 +164,26 @@ async function boot() {
   board.setPosition(START_FEN);
   await wait(300);
   $('boot').classList.add('gone');
+  setPhase('START');
+  speak('Welcome back to the cabin. Shall we <span class="q">study</span> your games, or test your <span class="q">mind</span>?');
+  $('start-overlay').hidden = false;
+}
+boot();
+
+// pick a track from the start menu, then ask for the name.
+function chooseTrack(track) {
+  state.track = track;
+  $('start-overlay').hidden = true;
+  askUsername();
+}
+function askUsername() {
   setPhase('ASK_USERNAME');
   greetOnBoot();
   $('username-panel').hidden = false;
   $('username-input').focus?.();
 }
-boot();
+$('btn-track-study').addEventListener('click', () => { sounds.tick(); chooseTrack('study'); });
+$('btn-track-mental').addEventListener('click', () => { sounds.tick(); chooseTrack('mental'); });
 
 // If the cabin remembers you, greet by name and pre-fill it.
 function greetOnBoot() {
@@ -215,7 +241,8 @@ async function doFetch(name) {
     rememberUser(name);
     $('username-panel').hidden = true;
     $('btn-rename').hidden = false;
-    await showGames(LINES.pickGame(name));
+    if (state.track === 'mental') { state.blindSkill = eloToSkill(userElo()); showMentalPicker(); }
+    else await showGames(LINES.pickGame(name));
   } catch (ex) {
     setPhase('ASK_USERNAME');
     err.textContent = ex.code === 404 ? `I know no soul named "${name}".` : (ex.message || 'The candle guttered — try again.');
@@ -289,16 +316,249 @@ async function startFixMistakes() {
 async function backToGames(line) {
   setPhase('PICK_GAME');
   deck.reset();
+  board.showHints = true; board.setPiecesVisible(true); board.removeFloating();
   $('quiz-hud').hidden = true;
   $('quiz-notation').hidden = true;
   $('review-hud').hidden = true;
   $('evalbar').hidden = true;
   $('mode-overlay').hidden = true;
+  $('blindfold').hidden = true;
+  $('challenge-hud').hidden = true;
   board.clearHighlights(); board.clearArrows();
   hush();
   speak(line || `<span class="q">Pick</span> one.`);
   paper.drawGameList(state.games, { page: state.page, hasMore: state.feed ? state.feed.hasMore(state.page) : false });
   host.leanIn(); await paper.slideIn(); await host.leanBack();
+}
+
+/* ─────────────────── mental challenges ─────────────────── */
+
+function userElo() { const g = state.games && state.games[0]; return (g && g.userRating) || 800; }
+function eloToSkill(elo) { return Math.max(0, Math.min(20, Math.round((elo - 500) / 95))); }
+
+function showMentalPicker() {
+  setPhase('MENTAL_MODE');
+  speak(`I'll play to your level — around <span class="q">${userElo()}</span>. Now, choose your torment.`);
+  $('mental-overlay').hidden = false;
+}
+$('btn-mental-shaker').addEventListener('click', () => { $('mental-overlay').hidden = true; startShaker(); });
+$('btn-mental-blind').addEventListener('click', () => { $('mental-overlay').hidden = true; startBlindfold(); });
+$('btn-mental-back').addEventListener('click', () => {
+  $('mental-overlay').hidden = true; setPhase('START'); $('start-overlay').hidden = false;
+  speak('Very well. <span class="q">Study</span>, or your <span class="q">mind</span>?');
+});
+
+function showChallenge(html, { retry = false } = {}) {
+  $('challenge-msg').innerHTML = html;
+  $('challenge-hud').hidden = false;
+  $('btn-challenge-retry').hidden = !retry;
+}
+
+function hideChallengeHuds() {
+  $('quiz-hud').hidden = true; $('quiz-notation').hidden = true; $('review-hud').hidden = true;
+  $('evalbar').hidden = true; $('mode-overlay').hidden = true;
+}
+
+$('btn-challenge-exit').addEventListener('click', () => exitChallenge());
+$('btn-challenge-retry').addEventListener('click', () => {
+  $('challenge-hud').hidden = true; state.session++;
+  board.removeFloating(); board.clearHighlights(); board.clearArrows();
+  if (state.lastChallenge === 'blind') startBlindfold(); else startShaker();
+});
+
+function exitChallenge() {
+  state.session++;
+  board.showHints = true; board.setPiecesVisible(true); board.removeFloating();
+  board.clearHighlights(); board.clearArrows();
+  $('blindfold').hidden = true; $('challenge-hud').hidden = true;
+  state.blind = null; state.shaker = null; state.blindOver = false;
+  board.setPosition(START_FEN);
+  showMentalPicker();
+}
+
+/* ── Blindfolded Mode ── */
+
+async function startBlindfold() {
+  state.lastChallenge = 'blind';
+  setPhase('BLIND');
+  deck.reset(); hideChallengeHuds();
+  await paper.slideOut();
+  state.blind = new Chess();
+  state.blindColor = 'w'; state.blindTurn = true; state.blindLocked = false; state.blindOver = false;
+  board.showHints = false;
+  board.setPiecesVisible(true);
+  board.setOrientation('w');
+  board.setPosition(START_FEN);
+  board.clearHighlights();
+  host.leanIn();
+  speak('Hold still. This won\'t hurt… much.');
+  await wait(FAST.on ? 0 : 750);
+  if (state.phase !== 'BLIND') return;
+  $('blindfold').hidden = false;
+  board.setPiecesVisible(false);
+  host.leanBack();
+  showChallenge('The board is <span class="q">red</span> and the pieces are gone. Play from <span class="q">memory</span> — you are white.');
+}
+
+function blindLast(mv) {
+  board.clearHighlights('last-from'); board.clearHighlights('last-to'); board.clearHighlights('check');
+  board.highlight(mv.from, 'last-from'); board.highlight(mv.to, 'last-to');
+  if (state.blind.inCheck()) { const k = findKing(state.blind, state.blind.turn()); if (k) board.highlight(k, 'check'); }
+}
+
+async function blindUserMove({ from, to, promotion }) {
+  if (state.phase !== 'BLIND' || state.blindLocked || !state.blindTurn) return;
+  const legal = state.blind.moves({ square: from, verbose: true }).filter((mv) => mv.to === to);
+  if (!legal.length) return;
+  if (legal[0].promotion && !promotion) {
+    promotion = await askPromotion(state.blindColor);
+    if (!promotion) { board.clearSelection(); return; }
+  }
+  state.blindLocked = true; state.blindTurn = false;
+  const session = state.session;
+  const mv = state.blind.move({ from, to, promotion });
+  mv.captured ? sounds.capture() : sounds.move();
+  await board.move(from, to, promotion);
+  board.setPiecesVisible(false);
+  blindLast(mv);
+  if (blindCheckEnd()) return;
+  await wait(FAST.on ? 0 : 350);
+  if (state.phase !== 'BLIND' || session !== state.session) return;
+  await blindEngineMove(session);
+}
+
+async function blindEngineMove(session) {
+  let res;
+  try { res = await state.engine.evaluate(state.blind.fen(), { depth: 10, movetime: 900, skill: state.blindSkill }); }
+  catch { res = null; }
+  if (state.phase !== 'BLIND' || session !== state.session) return;
+  const uci = res && res.bestMove;
+  if (uci) {
+    const mv = state.blind.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+    mv.captured ? sounds.capture() : sounds.move();
+    await board.move(mv.from, mv.to, uci[4]);
+    board.setPiecesVisible(false);
+    blindLast(mv);
+  }
+  state.blindLocked = false; state.blindTurn = true;
+  blindCheckEnd();
+}
+
+function blindCheckEnd() {
+  if (!state.blind.isGameOver()) return false;
+  state.blindOver = true; state.blindLocked = true; state.blindTurn = false;
+  board.setPiecesVisible(true);
+  $('blindfold').hidden = true;
+  let msg;
+  if (state.blind.isCheckmate()) {
+    const userWon = state.blind.turn() !== state.blindColor;   // the side to move is the one mated
+    msg = userWon ? 'Checkmate — and you never <span class="q">saw</span> it. Remarkable.' : 'Checkmate. I saw what you <span class="q">could not</span>.';
+  } else msg = 'A <span class="q">draw</span>, played blind. Respectable.';
+  speak(msg);
+  showChallenge(msg, { retry: true });
+  return true;
+}
+
+/* ── Board Shaker ── */
+
+function rndInt(n) { return Math.floor(Math.random() * n); }
+
+const PIECE_NAME = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
+
+function randomShakerPosition() {
+  const used = new Set(); const pieces = [];
+  const pick = (type) => {
+    let sq, tries = 0;
+    do { sq = 'abcdefgh'[rndInt(8)] + (1 + rndInt(8)); tries++; }
+    while ((used.has(sq) || (type === 'p' && (sq[1] === '1' || sq[1] === '8'))) && tries < 60);
+    used.add(sq); return sq;
+  };
+  pieces.push({ color: 'w', type: 'k', sq: pick('k') });
+  pieces.push({ color: 'b', type: 'k', sq: pick('k') });
+  const types = ['q', 'r', 'r', 'b', 'b', 'n', 'n', 'p', 'p'];
+  for (let i = 0; i < 5; i++) { const type = types[rndInt(types.length)]; pieces.push({ color: rndInt(2) ? 'w' : 'b', type, sq: pick(type) }); }
+  return { pieces, fen: shakerFen(pieces) };
+}
+
+function shakerFen(pieces) {
+  const grid = Array.from({ length: 8 }, () => Array(8).fill(null));
+  for (const p of pieces) {
+    const f = p.sq.charCodeAt(0) - 97, r = 8 - parseInt(p.sq[1], 10);
+    grid[r][f] = p.color === 'w' ? p.type.toUpperCase() : p.type;
+  }
+  return grid.map((row) => {
+    let s = '', empty = 0;
+    for (const c of row) { if (!c) empty++; else { if (empty) { s += empty; empty = 0; } s += c; } }
+    return s + (empty || '');
+  }).join('/') + ' w - - 0 1';
+}
+
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = rndInt(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+async function startShaker() {
+  state.lastChallenge = 'shaker';
+  setPhase('SHAKER');
+  deck.reset(); hideChallengeHuds();
+  board.showHints = true; board.setPiecesVisible(true);
+  $('blindfold').hidden = true;
+  await paper.slideOut();
+  const setup = randomShakerPosition();
+  state.shaker = { setup, queue: [], idx: 0, current: null, lost: false, done: false };
+  board.setOrientation('w');
+  board.setPosition(setup.fen);
+  board.clearHighlights();
+  showChallenge('Burn it into your mind…');
+  await wait(FAST.on ? 0 : 3400);          // memorise
+  if (state.phase !== 'SHAKER') return;
+  speak('<span class="q">Hah!</span>');
+  sounds.capture();
+  await board.shakeOff();
+  if (state.phase !== 'SHAKER') return;
+  state.shaker.queue = shuffle(setup.pieces.slice());
+  setPhase('SHAKER_PLACE');
+  nextShakerPiece();
+}
+
+function nextShakerPiece() {
+  const s = state.shaker;
+  if (!s || s.idx >= s.queue.length) return shakerWin();
+  s.current = s.queue[s.idx];
+  board.floatPiece(s.current.color, s.current.type);
+  showChallenge(`Where did the <span class="q">${s.current.color === 'w' ? 'white' : 'black'} ${PIECE_NAME[s.current.type]}</span> stand? <span class="dim">${s.queue.length - s.idx} left</span>`);
+}
+
+function placeShakerPiece(sq) {
+  const s = state.shaker;
+  if (!s || !s.current || state.phase !== 'SHAKER_PLACE') return;
+  if (board.pieceAt.has(sq)) return;              // square taken — just ignore
+  if (sq === s.current.sq) {
+    board.dropFloatingTo(sq); sounds.correct();
+    s.idx++;
+    if (s.idx >= s.queue.length) shakerWin();
+    else nextShakerPiece();
+  } else {
+    shakerLose();
+  }
+}
+
+function shakerWin() {
+  state.shaker.done = true;
+  setPhase('SHAKER_DONE');
+  sounds.fanfare();
+  speak('<span class="q">Flawless.</span> Every piece, exactly.');
+  showChallenge('Flawless — you rebuilt the whole board.', { retry: true });
+}
+
+function shakerLose() {
+  const c = state.shaker.current;
+  state.shaker.lost = true;
+  setPhase('SHAKER_DONE');
+  sounds.wrong();
+  board.removeFloating();
+  board.setPosition(state.shaker.setup.fen);      // reveal the truth
+  board.highlight(c.sq, 'hint-glow');
+  speak(`<span class="q">Wrong.</span> It stood on <span class="q">${c.sq}</span>.`);
+  showChallenge(`Wrong — that ${PIECE_NAME[c.type]} belonged on <span class="q">${c.sq}</span>.`, { retry: true });
 }
 
 /* ──────────────────── simple review mode ───────────────── */
@@ -931,6 +1191,18 @@ window.__rmc = {
   toReview() { return switchToReview(); },
   get evalBarShown() { return !$('evalbar').hidden; },
   get notation() { return $('quiz-notation').textContent; },
+  // start menu + mental challenges
+  chooseTrack(t) { return chooseTrack(t); },
+  chooseMental(m) { $('mental-overlay').hidden = true; return m === 'blind' ? startBlindfold() : startShaker(); },
+  get blindHidden() { return board._piecesHidden === true; },
+  get blindShown() { return !$('blindfold').hidden; },
+  get blindTurn() { return state.blindTurn; },
+  get blindOver() { return state.blindOver; },
+  blindMove(from, to, promo) { return blindUserMove({ from, to, promotion: promo }); },
+  get shakerCurrent() { const c = state.shaker && state.shaker.current; return c ? { sq: c.sq, color: c.color, type: c.type } : null; },
+  shakerPlace(sq) { return placeShakerPiece(sq); },
+  get shakerLost() { return !!(state.shaker && state.shaker.lost); },
+  get shakerDone() { return !!(state.shaker && state.shaker.done); },
 };
 
 // deep link ?user=name

@@ -25,6 +25,41 @@
   <button id="btn-sound" class="rune-btn" title="Toggle sound">♪</button>
 </div>
 
+<!-- start menu: which kind of session -->
+<div id="start-overlay" class="modal" hidden>
+  <div class="parchment scrap mode-card">
+    <p id="start-title">What shall we do tonight?</p>
+    <div class="mode-choices">
+      <button class="ink-btn go" id="btn-track-study">📖 Study Games<small>review your real games</small></button>
+      <button class="ink-btn" id="btn-track-mental">🧠 Mental Challenges<small>test your memory &amp; nerve</small></button>
+    </div>
+  </div>
+</div>
+
+<!-- mental-challenge picker -->
+<div id="mental-overlay" class="modal" hidden>
+  <div class="parchment scrap mode-card">
+    <p id="mental-title">Choose your torment.</p>
+    <div class="mode-choices">
+      <button class="ink-btn go" id="btn-mental-shaker">🌀 Board Shaker<small>rebuild the position from memory</small></button>
+      <button class="ink-btn" id="btn-mental-blind">🩸 Blindfolded<small>play with the pieces unseen</small></button>
+    </div>
+    <button class="link-btn" id="btn-mental-back">← back</button>
+  </div>
+</div>
+
+<!-- blindfold red tint (see-through, clicks pass through) -->
+<div id="blindfold" class="blindfold" hidden aria-hidden="true"></div>
+
+<!-- board-shaker / blindfold HUD (bottom) -->
+<div id="challenge-hud" class="parchment" hidden>
+  <div id="challenge-msg" class="challenge-msg"></div>
+  <div class="hud-actions">
+    <button class="ink-btn" id="btn-challenge-retry" hidden>↺ again</button>
+    <button class="link-btn" id="btn-challenge-exit">✕ leave</button>
+  </div>
+</div>
+
 <!-- username prompt (parchment scrap) -->
 <div id="username-panel" class="parchment scrap" hidden>
   <form id="username-form" autocomplete="off">
