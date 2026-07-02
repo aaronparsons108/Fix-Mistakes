@@ -94,6 +94,8 @@ export async function analyzeGame(game, engine, { onProgress = () => {} } = {}) 
       playedUci: s.playedUci,
       bestUci: before.bestMove,
       bestSan: uciToSan(s.mv.before, before.bestMove),
+      bestLine: (before.pv || []).slice(0, 6),   // the idea behind the best move
+      punishLine: (after.pv || []).slice(0, 4),  // how the played move gets punished
       evalBest: before.score,
       mateBest: before.mateIn,
       evalAfterPlayed: after.score,

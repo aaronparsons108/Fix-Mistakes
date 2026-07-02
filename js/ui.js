@@ -56,7 +56,7 @@ export function sparkle(x, y, kind = 'ember', { count = 22, power = 1 } = {}) {
 let speechTimer = null, speech = null;
 const TYPE_MS = 26; // ms per revealed character
 
-export function speak(html, { hold = 0 } = {}) {
+export function speak(html, { hold = 0, mood = 0 } = {}) {
   const box = $('host-speech'), el = $('speech-text');
   box.hidden = false;
   box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
@@ -65,7 +65,8 @@ export function speak(html, { hold = 0 } = {}) {
   if (FAST.on) { el.innerHTML = html; if (hold > 0) speechTimer = setTimeout(() => { box.hidden = true; }, hold); return; }
 
   el.innerHTML = '';
-  speech = { html, i: 0, shown: '', blips: 0, acc: 0, hold, held: false };
+  // mood: -1 low/displeased … +1 bright — shifts the blip pitch a little
+  speech = { html, i: 0, shown: '', blips: 0, acc: 0, hold, held: false, mood, pauses: 0 };
 }
 
 // Advance the typewriter; call once per animation frame with the frame's dt (s).
@@ -82,7 +83,15 @@ export function tickSpeech(dtSeconds) {
     const c = s.html[s.i];
     if (c === '<') { const j = s.html.indexOf('>', s.i); if (j < 0) { s.shown += c; s.i++; } else { s.shown += s.html.slice(s.i, j + 1); s.i = j + 1; } }
     else if (c === '&') { const j = s.html.indexOf(';', s.i), k = j < 0 ? s.i : j; s.shown += s.html.slice(s.i, k + 1); s.i = k + 1; }
-    else { s.shown += c; s.i++; if (c !== ' ' && s.blips++ < 60) sounds.blip(c); }
+    else {
+      s.shown += c; s.i++;
+      if (c !== ' ' && s.blips++ < 60) sounds.blip(c, s.mood);
+      // breathe at punctuation, like real speech (capped so long lines don't drag)
+      if (s.pauses < 5) {
+        if ('.?!—…'.includes(c)) { s.acc -= TYPE_MS * 6; s.pauses++; }
+        else if (c === ',') { s.acc -= TYPE_MS * 3; s.pauses++; }
+      }
+    }
     advanced = true;
   }
   if (advanced) $('speech-text').innerHTML = s.shown;

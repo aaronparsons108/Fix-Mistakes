@@ -8,8 +8,8 @@ import { Chess } from '../lib/chess.js';
 import { Engine, formatEval } from './engine.js';
 import { fetchPlayer, openGameFeed } from './chesscom.js';
 import { analyzeGame, parseGame, uciToSan, ANALYSIS_NODES } from './analysis.js';
-import { lastUser, rememberUser, sealedCount, addSealed } from './store.js';
-import { initScene, scene, camera, onFrame, flareCandles, setLampControl, getLampControl, getRopeKnob } from './scene.js';
+import { lastUser, rememberUser, sealedCount, addSealed, shakerLevel, setShakerLevel } from './store.js';
+import { initScene, scene, camera, onFrame, flareCandles, introLight, setLampControl, getLampControl, getRopeKnob } from './scene.js';
 import { Board3D } from './board3d.js';
 import { Host, HOST_COLOR } from './host.js';
 import { Paper } from './paper.js';
@@ -17,7 +17,8 @@ import { CardDeck } from './cards.js';
 import { FlipButton } from './flipbutton.js';
 import { loadPieces } from './pieces.js';
 import { FAST, wait, tween } from './tween.js';
-import { sounds, toggleMute, isMuted } from './sound.js';
+import { sounds, toggleMute, isMuted, startAmbience } from './sound.js';
+import { nameOpening } from './openings.js';
 import { floatLabel, sparkle, speak, hush, toast, askPromotion, tickSpeech } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -101,11 +102,21 @@ function stretchArm(a, b) {
   arm.quaternion.setFromUnitVectors(_UP, _dir.normalize());
 }
 
+// when nothing on the board demands his attention, the host watches your hand
+const pointerGaze = new THREE.Vector3(0, 3.5, 7.5);
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -7);
+const gazeRay = new THREE.Raycaster();
+canvas.addEventListener('pointermove', (e) => {
+  gazeRay.setFromCamera(new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1), camera);
+  const hit = new THREE.Vector3();
+  if (gazeRay.ray.intersectPlane(gazePlane, hit)) pointerGaze.lerp(hit, 0.5);
+});
+
 onFrame((t, dt) => {
   tickSpeech(dt);
   deck.update();
   host.update(t, dt);
-  host.lookAt(state.gaze);
+  host.lookAt(state.gaze || (cinematic ? pointerGaze : null));
   board.pulse(t);
   if (!paper.hidden) { arm.visible = true; stretchArm(host.shoulderWorld(), paper.handWorld()); }
   else arm.visible = false;
@@ -144,17 +155,40 @@ canvas.addEventListener('pointercancel', ropeEnd, true);
 // click anywhere on the board to skip the move-by-move playback
 canvas.addEventListener('pointerdown', () => { if (state.playing) state.skipPlayback = true; });
 
+// the hearth wakes on the first touch (browser autoplay rules)
+window.addEventListener('pointerdown', () => { try { startAmbience(); } catch {} }, { once: true });
+window.addEventListener('keydown', () => { try { startAmbience(); } catch {} }, { once: true });
+
+// a slow, breathing camera drift — the cabin never sits perfectly still.
+// Off in tests (webdriver) so pointer→square projections stay exact.
+const cinematic = !headless;
+onFrame((t) => {
+  if (!cinematic || FAST.on) return;
+  camera.position.x = Math.sin(t * 0.13) * 0.2;
+  camera.position.y = 9.4 + Math.sin(t * 0.09) * 0.07;
+  camera.lookAt(0, 0, -1);
+});
+
 // pick games / page through the parchment
 canvas.addEventListener('click', (e) => {
   if (state.phase === 'PICK_GAME') {
     const hit = paper.pick(e.clientX, e.clientY);
-    if (!hit) return;
-    if (hit.type === 'game') pickGame(hit.index);
-    else if (hit.type === 'next') changePage(1);
-    else if (hit.type === 'prev') changePage(-1);
+    if (hit) {
+      if (hit.type === 'game') return pickGame(hit.index);
+      if (hit.type === 'next') return changePage(1);
+      if (hit.type === 'prev') return changePage(-1);
+    }
   } else if (state.phase === 'SHAKER_PLACE') {
     const sq = board.squareFromClient(e.clientX, e.clientY);
-    if (sq) placeShakerPiece(sq);
+    if (sq) return placeShakerPiece(sq);
+  }
+  // tap the chest → the host tallies what you've sealed inside it
+  if (!state.playing && state.username && widgetRay(e).intersectObject(deck.chest.group, true).length) {
+    const n = sealedCount(state.username);
+    sounds.tick();
+    speak(n > 0
+      ? `<span class="q">${n}</span> sealed in there. Keep them there.`
+      : `Empty, for now. It fills as you <span class="q">fix</span> things.`, { hold: 3500 });
   }
 });
 
@@ -162,10 +196,12 @@ async function boot() {
   state.engine.init().catch(() => {}); // warm the engine
   try { await loadPieces(); host.attachPawnModel(); } catch (e) { console.error('piece models failed to load', e); }
   board.setPosition(START_FEN);
-  await wait(300);
+  await wait(1100);            // let the title breathe on the black
+  if (cinematic) introLight(); // arm the cold open before the veil lifts
   $('boot').classList.add('gone');
+  await wait(1400);            // the veil fades as the torches catch…
   setPhase('START');
-  speak('Welcome back to the cabin. Shall we <span class="q">study</span> your games, or test your <span class="q">mind</span>?');
+  speak('Welcome to the cabin. Shall we <span class="q">study</span> your games, or test your <span class="q">mind</span>?');
   $('start-overlay').hidden = false;
 }
 boot();
@@ -432,7 +468,7 @@ async function startBlindfold() {
   deck.reset(); hideChallengeHuds();
   await paper.slideOut();
   state.blind = new Chess();
-  state.blindColor = 'w'; state.blindTurn = true; state.blindLocked = false; state.blindOver = false; state.blindPeeking = false;
+  state.blindColor = 'w'; state.blindTurn = true; state.blindLocked = false; state.blindOver = false; state.blindPeeking = false; state.blindPeeks = 0;
   board.showHints = false;
   board.setPiecesVisible(true);
   board.setOrientation(state.blindColor);
@@ -448,13 +484,17 @@ async function startBlindfold() {
 }
 
 // Take the blindfold off for one second — but the pawn is not pleased.
+// He escalates by repetition: a word, a shorter word, then only the look.
 function blindPeek() {
   if (state.phase !== 'BLIND' || state.blindPeeking) return;
   state.blindPeeking = true;
+  state.blindPeeks = (state.blindPeeks || 0) + 1;
   board.setPiecesVisible(true);          // a glimpse of the truth
   host.react('bad');                     // furrowed brow + a shake
   sounds.wrong();
-  speak('<span class="q">Cheater.</span>', { hold: 1300 });
+  if (state.blindPeeks === 1) speak('<span class="q">Cheater.</span>', { hold: 1300, mood: -1 });
+  else if (state.blindPeeks === 2) speak('<span class="q">Again.</span>', { hold: 1100, mood: -1 });
+  // third time and after: silence — just the look.
   setTimeout(() => {
     if (state.phase === 'BLIND') board.setPiecesVisible(false);
     state.blindPeeking = false;
@@ -527,7 +567,7 @@ function rndInt(n) { return Math.floor(Math.random() * n); }
 
 const PIECE_NAME = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
 
-function randomShakerPosition() {
+function randomShakerPosition(extras = 5) {
   const used = new Set(); const pieces = [];
   const adjacent = (a, b) => Math.abs(a.charCodeAt(0) - b.charCodeAt(0)) <= 1 && Math.abs(+a[1] - +b[1]) <= 1;
   const pick = (type, avoid) => {
@@ -539,7 +579,7 @@ function randomShakerPosition() {
   const wk = pick('k'); pieces.push({ color: 'w', type: 'k', sq: wk });
   const bk = pick('k', wk); pieces.push({ color: 'b', type: 'k', sq: bk });   // kings can't be adjacent
   const types = ['q', 'r', 'r', 'b', 'b', 'n', 'n', 'p', 'p'];
-  for (let i = 0; i < 5; i++) { const type = types[rndInt(types.length)]; pieces.push({ color: rndInt(2) ? 'w' : 'b', type, sq: pick(type) }); }
+  for (let i = 0; i < extras; i++) { const type = types[rndInt(types.length)]; pieces.push({ color: rndInt(2) ? 'w' : 'b', type, sq: pick(type) }); }
   return { pieces, fen: shakerFen(pieces) };
 }
 
@@ -565,13 +605,14 @@ async function startShaker() {
   board.showHints = true; board.setPiecesVisible(true);
   $('blindfold').hidden = true;
   await paper.slideOut();
-  const setup = randomShakerPosition();
+  const level = shakerLevel(state.username);
+  const setup = randomShakerPosition(Math.min(4 + level, 12));   // level 1 = 7 pieces, +1 per win
   // `remaining` are the pieces still to place, in a random asking order
-  state.shaker = { setup, remaining: shuffle(setup.pieces.slice()), current: null, lost: false, done: false };
+  state.shaker = { setup, level, remaining: shuffle(setup.pieces.slice()), current: null, lost: false, done: false };
   board.setOrientation('w');
   board.setPosition(setup.fen);
   board.clearHighlights();
-  showChallenge('Burn it into your mind…');
+  showChallenge(`<span class="q">Level ${level}</span> — ${setup.pieces.length} pieces this time. Don't blink…`);
   await wait(FAST.on ? 0 : 3400);          // memorise
   if (state.phase !== 'SHAKER') return;
   speak('<span class="q">Hah!</span>');
@@ -618,8 +659,10 @@ function shakerWin() {
   state.shaker.done = true;
   setPhase('SHAKER_DONE');
   sounds.fanfare();
-  speak('<span class="q">Flawless.</span> Every piece, exactly.');
-  showChallenge('Flawless — you rebuilt the whole board.', { retry: true });
+  const next = state.shaker.level + 1;
+  setShakerLevel(state.username, next);
+  speak(`<span class="q">Flawless.</span> Every piece, exactly. Level <span class="q">${next}</span> adds one more.`);
+  showChallenge(`Flawless — the whole board, from memory. <span class="q">Level ${next}</span> awaits.`, { retry: true });
 }
 
 function shakerLose() {
@@ -651,7 +694,10 @@ async function startReview({ atPly = 0 } = {}) {
   await paper.slideOut();
   flareCandles();
   const moves = parseGame(game.pgn).map((m) => ({ ...m, uci: m.from + m.to + (m.promotion || '') }));
-  state.rev = { moves, line: [], ply: 0, chess: new Chess(START_FEN), branched: false, userColor: game.userColor };
+  state.rev = {
+    moves, line: [], ply: 0, chess: new Chess(START_FEN), branched: false,
+    userColor: game.userColor, opening: nameOpening(moves.map((mv) => mv.san)),
+  };
   for (let p = 0; p < atPly && p < moves.length; p++) {   // seek to the handed-over position
     const made = state.rev.chess.move({ from: moves[p].from, to: moves[p].to, promotion: moves[p].promotion });
     state.rev.line.push(recordMove(made, state.rev.chess.fen()));
@@ -747,7 +793,7 @@ function updateReviewHud() {
   const r = state.rev;
   const last = r.ply > 0 ? r.line[r.ply - 1] : null;
   const moveEl = $('rev-move');
-  if (!last) moveEl.innerHTML = '<span class="dim">starting position</span>';
+  if (!last) moveEl.innerHTML = `<span class="dim">starting position${r.opening ? ' · ' + escapeText(r.opening) : ''}</span>`;
   else {
     const n = Math.floor((r.ply - 1) / 2) + 1;
     const sep = (r.ply % 2 === 1) ? '.' : '…';
@@ -801,6 +847,7 @@ $('btn-rev-exit').addEventListener('click', () => { state.rev = null; state.eval
 function startQuiz(moments) {
   state.moments = moments;
   state.allMoves = parseGame(state.game.pgn);
+  state.openingName = nameOpening(state.allMoves.map((mv) => mv.san));
   state.idx = 0;
   state.results = new Array(moments.length).fill(null);
   state.stats = { first: 0, solved: 0, accepted: 0, revealed: 0, hints: 0, retries: 0 };
@@ -817,6 +864,7 @@ async function loadPuzzle(i) {
   state.skipPlayback = false;
   state.attempts = 0;
   state.hintUsed = false;
+  state.hintStage = 0; $('btn-hint').textContent = '✦ hint';
   state.replaying = false;
   setPhase('QUIZ');
 
@@ -829,8 +877,11 @@ async function loadPuzzle(i) {
   showEvalGraph(m);
   setEvalBar(m.evalBest, m.mateBest);   // the position's eval, chess.com-style bar
   updateQuizNotation(m);
+  clearEngineLine();
   setButtons({});
-  speak(i === 0 ? 'Watch how it went.' : 'It keeps going.');
+  speak(i === 0
+    ? (state.openingName ? `A <span class="q">${escapeText(state.openingName)}</span>. Watch what you do to it.` : 'Watch how it went.')
+    : 'It keeps going.');
   setFeedback('<span class="dim">click the board to skip ahead</span>', 'info');
 
   // play the game's actual moves, one by one, up to this critical position
@@ -934,13 +985,14 @@ function judge(kind, m, uci, after) {
   if (kind === 'best') {
     revealBestSan(m);
     deck.markSolved(state.idx);   // green arrow appears on the card
+    showEngineLine('the idea:', m.fen, m.bestLine);
     sparkle(x, y, 'ok', { power: 1.3 }); floatLabel(x, y, 'BEST', 'ok'); sounds.correct(); host.react('best');
     if (!replay) {
       state.results[state.idx] = state.attempts === 1 ? 'first' : 'solved';
       state.attempts === 1 ? state.stats.first++ : state.stats.solved++;
       renderCounter();
     }
-    speak(state.attempts === 1 && !replay ? LINES.bestFirst : LINES.best);
+    speak(state.attempts === 1 && !replay ? LINES.bestFirst : LINES.best, { mood: 1 });
     setFeedback(`<b>${san}</b>: BEST <span class="dim">${replay ? 'again' : state.attempts === 1 ? 'first try' : 'in ' + state.attempts + ' tries'}</span>`, 'ok');
     setButtons({ next: true });
     return;
@@ -948,6 +1000,7 @@ function judge(kind, m, uci, after) {
   if (kind === 'great') {
     sparkle(x, y, 'great'); floatLabel(x, y, 'GREAT', 'great'); sounds.great(); host.react('great');
     speak(LINES.great);
+    showEngineLine('best reply:', state.quiz.fen(), after.pv);
     setFeedback(`<b>${san}</b>: GREAT <span class="dim">not the best</span>`, 'great');
     setButtons(replay ? { retry: true, next: true } : { retry: true, accept: true, idk: true });
     return;
@@ -955,10 +1008,12 @@ function judge(kind, m, uci, after) {
   if (kind === 'good') {
     sparkle(x, y, 'warn', { count: 14, power: 0.7 }); floatLabel(x, y, 'INACCURATE', 'warn'); sounds.wrong(); host.react('good');
     speak(LINES.inaccurate);
+    showEngineLine('punished by:', state.quiz.fen(), after.pv);
     setFeedback(`<b>${san}</b>: INACCURATE`, 'warn');
   } else {
     sparkle(x, y, 'bad'); floatLabel(x, y, sameAsGame ? 'AS BEFORE' : 'WORSE', 'bad'); sounds.wrong(); host.react('bad');
-    speak(sameAsGame ? LINES.same : LINES.worse);
+    speak(sameAsGame ? LINES.same : LINES.worse, { mood: -1 });
+    showEngineLine('punished by:', state.quiz.fen(), sameAsGame && m.punishLine?.length ? m.punishLine : after.pv);
     setFeedback(sameAsGame ? `<b>${san}</b>: YOUR GAME MOVE` : `<b>${san}</b>: WORSE`, 'bad');
   }
   if (replay) { setButtons({ retry: true, next: true }); return; }
@@ -975,6 +1030,7 @@ function resetPuzzlePosition() {
   restoreHighlights(m);
   showEvalGraph(m);
   setEvalBar(m.evalBest, m.mateBest);
+  clearEngineLine();
   state.gaze = null;
   setButtons({ hint: !state.hintUsed, idk: true });
   state.locked = false;
@@ -998,6 +1054,7 @@ function renderPuzzleAt(i) {
   const m = state.moments[i];
   state.idx = i;
   state.attempts = 0; state.hintUsed = false; state.playing = false; state.skipPlayback = false;
+  state.hintStage = 0; $('btn-hint').textContent = '✦ hint';
   state.replaying = state.results[i] != null;   // revisiting a solved one shouldn't re-score it
   board.setOrientation(m.userColor);
   board.setPosition(m.fen);
@@ -1009,6 +1066,7 @@ function renderPuzzleAt(i) {
   setEvalBar(m.evalBest, m.mateBest);
   updateQuizNotation(m);
   setFeedback('', '');
+  clearEngineLine();
   // if this one was already dealt with, let the player move on again as well
   setButtons(state.results[i] != null ? { hint: true, idk: true, next: true } : { hint: true, idk: true });
   state.gaze = null;
@@ -1062,11 +1120,24 @@ function switchToReview() {
   startReview({ atPly });
 }
 
-// No verdict screen — when the game is finished, return to the games paper.
+// No verdict screen — the host sums the session up in one line and the games
+// paper returns.
 async function completeSession() {
   state.idx = state.moments.length;
   setFeedback('', '');
-  await backToGames(LINES.gameDone);
+  const n = state.results.length;
+  const clean = state.results.filter((r) => r === 'first').length;
+  const solved = state.results.filter((r) => r === 'solved' || r === 'accepted').length;
+  const shown = n - clean - solved;
+  // the single costliest moment — concrete beats a grade
+  const worst = state.moments.reduce((a, b) => ((b.winLoss || 0) > (a?.winLoss || 0) ? b : a), null);
+  const costly = worst && n > 1 ? ` Move <span class="q">${worst.moveNumber}</span> was the expensive one.` : '';
+  let line;
+  if (shown === 0 && solved === 0) line = `All <span class="q">${n}</span>, first try. I have nothing to teach you tonight.`;
+  else if (shown === 0) line = `All <span class="q">${n}</span> mended and sealed.${costly} Pick another.`;
+  else if (clean + solved > 0) line = `<span class="q">${clean + solved}</span> mended, <span class="q">${shown}</span> I had to show you.${costly} Pick another.`;
+  else line = `I showed you all <span class="q">${n}</span>. Next time you show me.${costly} Pick another.`;
+  await backToGames(line);
 }
 
 /* ─────────────────────── reveal / hint ─────────────────── */
@@ -1092,6 +1163,7 @@ async function doReveal() {
   sparkle(x, y, 'info'); floatLabel(x, y, m.bestSan, 'info');
   revealBestSan(m);
   setEvalBar(m.evalBest, m.mateBest);   // the bar shows where the best move lands
+  showEngineLine('the idea:', m.fen, m.bestLine);
   deck.markSolved(state.idx);   // green arrow for the right move on the card
   if (state.results[state.idx] == null) { state.results[state.idx] = 'revealed'; state.stats.revealed++; renderCounter(); }
   speak(LINES.reveal(m.bestSan));
@@ -1174,6 +1246,29 @@ function revealBestSan(m) {
 
 function setFeedback(html, cls) { const f = $('hud-feedback'); f.innerHTML = html; f.className = 'hud-feedback ' + (cls || ''); }
 
+// Replay a UCI list from a FEN into readable SAN ("Bxf7+ Kxf7 Ng5+ …").
+function sanLine(fen, ucis, max = 5) {
+  if (!ucis || !ucis.length) return '';
+  try {
+    const c = new Chess(fen);
+    const out = [];
+    for (const u of ucis.slice(0, max)) {
+      const mv = c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
+      if (!mv) break;
+      out.push(mv.san);
+    }
+    return out.join(' ');
+  } catch { return ''; }
+}
+
+// The little engine-line readout under the feedback: the *why* behind a verdict.
+function showEngineLine(label, fen, ucis) {
+  const el = $('hud-engine-line');
+  const line = sanLine(fen, ucis, 5);
+  el.innerHTML = line ? `<span class="el-label">${label}</span>${escapeText(line)}${(ucis || []).length > 5 ? ' …' : ''}` : '';
+}
+function clearEngineLine() { $('hud-engine-line').innerHTML = ''; }
+
 function setButtons({ hint = false, idk = false, retry = false, accept = false, next = false } = {}) {
   $('btn-hint').hidden = !hint; $('btn-idk').hidden = !idk; $('btn-retry').hidden = !retry;
   $('btn-accept').hidden = !accept; $('btn-next').hidden = !next;
@@ -1183,10 +1278,27 @@ function escapeText(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&a
 
 /* ─────────────────────── HUD buttons ───────────────────── */
 
+// A two-stage hint ladder: first name the *shape* of the answer (the
+// checks-captures-threats scan players should be running), only then point.
 $('btn-hint').addEventListener('click', () => {
   if (state.locked) return;
   const m = state.moments[state.idx];
-  state.hintUsed = true; state.stats.hints++; sounds.tick();
+  sounds.tick();
+  if (!state.hintStage) {
+    state.hintStage = 1; state.stats.hints++;
+    let cue = 'A <span class="q">quiet</span> move. Improve something.';
+    try {
+      const mv = new Chess(m.fen).move({ from: m.bestUci.slice(0, 2), to: m.bestUci.slice(2, 4), promotion: m.bestUci[4] });
+      const userSign = m.userColor === 'w' ? 1 : -1;
+      if (m.mateBest != null && m.mateBest * userSign > 0) cue = 'There\'s a <span class="q">mate</span> in this. Force it.';
+      else if (mv && mv.captured) cue = 'Something can be <span class="q">taken</span>.';
+      else if (mv && mv.san.includes('+')) cue = 'It starts with a <span class="q">check</span>.';
+    } catch {}
+    speak(cue);
+    $('btn-hint').textContent = '✦ where?';
+    return;
+  }
+  state.hintUsed = true;
   board.highlight(m.bestUci.slice(0, 2), 'hint-glow');
   speak('That one. It <span class="q">wants</span> to move.');
   $('btn-hint').hidden = true;
@@ -1259,7 +1371,7 @@ window.__rmc = {
   squareToClient(sq) { return board.squareCenter(sq, 0); },
   playMove(from, to, promo) { return handleUserMove({ from, to, promotion: promo }); },
   reveal() { return doReveal(); },
-  hint() { $('btn-hint').click(); },
+  hint() { $('btn-hint').click(); $('btn-hint').click(); },   // both hint stages
   retry() { retryCurrent(); },
   next() { return nextPuzzle(); },
   prev() { return prevPuzzle(); },

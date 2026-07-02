@@ -18,6 +18,11 @@ export function addSealed(u, n = 1) {
   try { localStorage.setItem(SEALED(u), String(sealedCount(u) + n)); } catch {}
 }
 
+// Board Shaker difficulty ladder — each win adds a piece to remember.
+const SHAKER = (u) => `rmc.shakerlvl.${u.toLowerCase()}`;
+export function shakerLevel(u) { return u ? Math.max(1, parseInt(localStorage.getItem(SHAKER(u)) || '1', 10) || 1) : 1; }
+export function setShakerLevel(u, n) { if (u) try { localStorage.setItem(SHAKER(u), String(n)); } catch {} }
+
 // A short, plain label for a blunder, derived from data we already have. Kept
 // deliberately coarse so it is never confidently wrong.
 export function classifyMistake(m) {

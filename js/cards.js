@@ -14,8 +14,8 @@ const GLYPH = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 
 // where cards live in the world (left of the board, clear of the eval bar,
 // the rope, and the flip button)
-const STACK = new THREE.Vector3(-6.7, -1.2, 2.2);
-const ACTIVE = new THREE.Vector3(-6.6, 2.5, -0.4);
+const STACK = new THREE.Vector3(-6.5, -1.2, 2.2);
+const ACTIVE = new THREE.Vector3(-6.3, 2.5, -0.4);
 const CHEST = new THREE.Vector3(-6.1, -4.5, -3.8);
 
 function sqToRC(sq, orient) {

@@ -77,7 +77,14 @@ export class Host {
     );
     lid.scale.y = 0.02;
     lid.visible = false;
-    g.add(white, irisGrp, lid);
+    // a fixed specular glint so the eyes read alive in every screenshot;
+    // inside the eye group, under the lid's dome, so blinks cover it
+    const glint = new THREE.Mesh(
+      new THREE.SphereGeometry(0.022, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xfff6e0, toneMapped: false })
+    );
+    glint.position.set(side * -0.035, 0.062, 0.145);
+    g.add(white, irisGrp, lid, glint);
     return { g, iris: irisGrp, lid, side };
   }
 

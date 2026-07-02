@@ -18,8 +18,42 @@ const tickers = []; // per-frame callbacks: (t, dt) => void
 
 export function onFrame(fn) { tickers.push(fn); }
 
-let lamp, hostFill, bulbMesh;
+let lamp, hostFill, bulbMesh, hemi;
 let baseExposure = 1.12;
+
+// The cold open: every fire light carries an intro factor that rises 0→1 as the
+// candles "catch". Factors multiply into flicker()'s intensities — nothing here
+// writes absolute values, so the rope-lamp math stays untouched.
+const intro = { on: false, exposure: 1, lamp: 1, torch: [1, 1], fill: 1, hemi: 1 };
+
+export function introLight() {
+  if (!renderer) return Promise.resolve();
+  intro.on = true;
+  intro.exposure = 0.14; intro.lamp = 0; intro.torch = [0, 0]; intro.fill = 0; intro.hemi = 0.12;
+  const skip = () => { intro.on = false; if (renderer) renderer.toneMappingExposure = baseExposure; };
+  window.addEventListener('pointerdown', skip, { once: true });
+  return import('./tween.js').then(async ({ tween, wait, FAST }) => {
+    if (FAST.on) { skip(); return; }
+    const catchTorch = (i) => tween({
+      ms: 480, ease: 'easeOutCubic',
+      onUpdate: (v) => { intro.torch[i] = Math.max(intro.torch[i], v * (0.7 + 0.5 * Math.abs(Math.sin(v * 11)))); },
+    }).then(() => { intro.torch[i] = 1; });
+    await wait(420);
+    await catchTorch(0);                        // one torch sputters alight…
+    await wait(160);
+    await catchTorch(1);                        // …then the other…
+    await tween({                               // …then the lamp swells and the room breathes in
+      ms: 1150, ease: 'easeInOutQuad',
+      onUpdate: (v) => {
+        if (!intro.on) return;
+        intro.lamp = v; intro.fill = v;
+        intro.hemi = 0.12 + 0.88 * v;
+        intro.exposure = 0.14 + 0.86 * v;
+      },
+    });
+    skip();   // hand exposure cleanly back to the rope-lamp math
+  });
+}
 
 export function initScene(canvas, { headless = false } = {}) {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -247,7 +281,8 @@ function buildLights() {
   lamp.shadow.camera.near = 1; lamp.shadow.camera.far = 24; lamp.shadow.bias = -0.0015;
   scene.add(lamp); scene.add(lamp.target);
 
-  scene.add(new THREE.HemisphereLight(0x6f5a3e, 0x140d08, 0.55));
+  hemi = new THREE.HemisphereLight(0x6f5a3e, 0x140d08, 0.55);
+  scene.add(hemi);
   hostFill = new THREE.PointLight(0xffd49a, 32, 16, 2.0);
   hostFill.position.set(0, 4.2, -4.0);
   scene.add(hostFill);
@@ -300,17 +335,23 @@ export function getRopeKnob() { return ropeKnob; }
 // gentle sway + a faint living glow; brightness comes from the rope control
 function flicker(t) {
   if (!lamp) return;
+  const k = intro.on ? intro : null;   // cold-open factors (1s everywhere once lit)
   const sx = Math.sin(t * 0.5) * 0.1, sz = Math.cos(t * 0.4) * 0.07;
   lamp.position.x = sx; lamp.position.z = LZ + sz;
   bulbMesh.position.x = sx; bulbMesh.position.z = LZ + sz;
   shadeMesh.position.x = sx; shadeMesh.position.z = LZ + sz;
-  lamp.intensity = lampBaseIntensity * (1 + 0.025 * Math.sin(t * 5.0));
+  lamp.intensity = lampBaseIntensity * (1 + 0.025 * Math.sin(t * 5.0)) * (k ? k.lamp : 1);
+  bulbMesh.visible = !k || k.lamp > 0.4;
+  hostFill.intensity = 32 * (k ? k.fill : 1);
+  hemi.intensity = 0.55 * (k ? k.hemi : 1);
+  if (k) renderer.toneMappingExposure = baseExposure * k.exposure;
   // torches flicker + face the camera
   for (let i = 0; i < torchFlames.length; i++) {
     const f = 1 + 0.18 * Math.sin(t * 13 + i * 2) + 0.1 * Math.sin(t * 27 + i);
     torchFlames[i].lookAt(camera.position);
-    torchFlames[i].scale.set(0.9 + 0.15 * Math.sin(t * 19 + i), f, 1);
-    torchLights[i].intensity = 14 * f;
+    const g = k ? k.torch[i] : 1;
+    torchFlames[i].scale.set((0.9 + 0.15 * Math.sin(t * 19 + i)) * g, f * Math.max(g, 0.001), 1);
+    torchLights[i].intensity = 14 * f * g;
   }
 }
 

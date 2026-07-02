@@ -9,6 +9,11 @@
 <meta property="og:title" content="Revise My Chess — the cabin" />
 <meta property="og:description" content="Fix your blunders, step through your games, or take on the pawn's mental challenges — in a candlelit 3D cabin." />
 <meta property="og:type" content="website" />
+<meta property="og:image" content="https://raw.githubusercontent.com/aaronparsons108/ReviseMyChess/main/assets/og.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://raw.githubusercontent.com/aaronparsons108/ReviseMyChess/main/assets/og.jpg" />
 <link rel="stylesheet" href="css/style.css" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='82' font-size='80'>♟</text></svg>" />
 <script type="importmap">
@@ -51,6 +56,10 @@
 
 <!-- start menu: which kind of session -->
 <div id="start-overlay" class="modal" hidden>
+  <div class="start-brand">
+    <h1 class="boot-title small">Revise <span class="bt-red">My</span> Chess</h1>
+    <div class="boot-tag">the pawn is waiting.</div>
+  </div>
   <div class="parchment scrap mode-card">
     <p id="start-title">What shall we do tonight?</p>
     <div class="mode-choices">
@@ -104,6 +113,7 @@
     <span id="hud-turn"></span>
   </div>
   <div id="hud-feedback" class="hud-feedback"></div>
+  <div id="hud-engine-line" class="hud-engine-line"></div>
   <div id="hud-graph" class="hud-graph"></div>
   <div id="hud-actions">
     <button class="ink-btn" id="btn-hint">✦ hint</button>
@@ -156,7 +166,14 @@
 
 <!-- boot + status -->
 <div id="toast" class="toast" hidden></div>
-<div id="boot" class="boot"><span class="boot-flame">🕯</span> lighting the candles…</div>
+<div id="boot" class="boot">
+  <div class="boot-inner">
+    <span class="boot-flame">🕯</span>
+    <h1 class="boot-title">Revise <span class="bt-red">My</span> Chess</h1>
+    <div class="boot-sub">— the cabin —</div>
+    <div class="boot-note">lighting the candles…</div>
+  </div>
+</div>
 
 <script type="module" src="js/app.js"></script>
 </body>

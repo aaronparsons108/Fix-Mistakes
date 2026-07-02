@@ -41,9 +41,28 @@ body {
   background: #060403; color: #caa66a; font-family: 'Typewriter', monospace;
   letter-spacing: 2px; font-size: 18px; transition: opacity 1s;
 }
-.boot.gone { opacity: 0; pointer-events: none; }
-.boot-flame { font-size: 40px; display: block; text-align: center; margin-bottom: 12px; animation: flameflick 1.6s ease-in-out infinite; }
+.boot.gone { opacity: 0; pointer-events: none; transition: opacity 1.6s ease; }
+.boot-inner { text-align: center; animation: bootrise 1.4s ease both; }
+.boot-flame { font-size: 40px; display: block; text-align: center; margin-bottom: 18px; animation: flameflick 1.6s ease-in-out infinite; }
 @keyframes flameflick { 50% { opacity: .5; transform: scale(1.1) rotate(-3deg); } }
+@keyframes bootrise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+.boot-title {
+  font-family: 'Fell', Georgia, serif; font-weight: 400; font-style: italic;
+  font-size: clamp(44px, 7vw, 74px); letter-spacing: 3px; color: #e8dcc0;
+  text-shadow: 0 0 34px rgba(230,170,80,0.25), 0 3px 14px rgba(0,0,0,0.9);
+  margin: 0 0 6px; line-height: 1.05;
+}
+.boot-title.small { font-size: clamp(30px, 4.4vw, 44px); }
+.bt-red { color: var(--blood); font-style: normal; }
+.boot-sub {
+  font-family: 'Typewriter', monospace; font-size: 15px; letter-spacing: 6px;
+  color: #9a7c4e; margin-bottom: 26px;
+}
+.boot-note { font-size: 14px; letter-spacing: 2px; color: #8a6c42; animation: flameflick 2.2s ease-in-out infinite; }
+.start-brand { position: absolute; top: max(5vh, 28px); left: 0; right: 0; text-align: center; pointer-events: none; }
+.start-brand .boot-sub { margin-bottom: 0; }
+.boot-tag { font-family: 'Fell', serif; font-style: italic; font-size: 16px; color: #8a7350; letter-spacing: 1px; margin-top: 2px; }
 
 /* ── parchment surfaces ──────────────────────────────── */
 .parchment {
@@ -144,6 +163,13 @@ body {
 .hud-feedback.bad { color: var(--q-bad); }
 .hud-feedback.info { color: #3a4a66; }
 /* eval comparison bars: GAME (what you played) · BEST · YOURS */
+.hud-engine-line {
+  font-family: 'Typewriter', monospace; font-size: 12.5px; color: #6a5430;
+  min-height: 16px; margin: 1px 0 3px; letter-spacing: .4px;
+}
+.hud-engine-line .el-label { font-family: 'Fell', serif; font-style: italic; color: #8a6c42; margin-right: 4px; }
+.hud-engine-line b { color: #2c2114; }
+
 .hud-graph { display: flex; flex-direction: column; gap: 5px; margin: 4px 0 2px; }
 .hg-head { font-family: 'Fell', serif; font-style: italic; font-size: 13px; color: #7a5a34; text-align: center; letter-spacing: 1px; margin-bottom: 2px; border-bottom: 1px solid rgba(107,83,49,0.35); padding-bottom: 3px; }
 .hg-row { display: grid; grid-template-columns: 58px 1fr 42px; align-items: center; gap: 7px; }
