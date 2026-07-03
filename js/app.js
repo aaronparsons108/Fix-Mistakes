@@ -898,7 +898,9 @@ async function loadPuzzle(i) {
   clearEngineLine();
   setButtons({});
   speak(i === 0
-    ? (state.openingName ? `A <span class="q">${escapeText(state.openingName)}</span>. Watch what you do to it.` : 'Watch how it went.')
+    ? (state.openingName
+        ? `A <span class="q">${escapeText(state.openingName)}</span>. You're playing <span class="q">${m.userColor === 'w' ? 'white' : 'black'}</span>. Watch how it went.`
+        : 'Watch how it went.')
     : 'It keeps going.');
   setFeedback('<span class="dim">click the board to skip ahead</span>', 'info');
 
