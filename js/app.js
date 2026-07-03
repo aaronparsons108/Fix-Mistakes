@@ -1249,16 +1249,17 @@ function setFeedback(html, cls) { const f = $('hud-feedback'); f.innerHTML = htm
 // Replay a UCI list from a FEN into readable SAN ("Bxf7+ Kxf7 Ng5+ …").
 function sanLine(fen, ucis, max = 5) {
   if (!ucis || !ucis.length) return '';
-  try {
-    const c = new Chess(fen);
-    const out = [];
-    for (const u of ucis.slice(0, max)) {
+  let c;
+  try { c = new Chess(fen); } catch { return ''; }
+  const out = [];
+  for (const u of ucis.slice(0, max)) {
+    try {
       const mv = c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
       if (!mv) break;
       out.push(mv.san);
-    }
-    return out.join(' ');
-  } catch { return ''; }
+    } catch { break; }   // keep whatever legal prefix we already collected
+  }
+  return out.join(' ');
 }
 
 // The little engine-line readout under the feedback: the *why* behind a verdict.
@@ -1344,7 +1345,7 @@ window.__rmc = {
   get busy() { return state.locked || state.playing; },
   get puzzle() {
     const m = state.moments[state.idx];
-    return m ? { bestUci: m.bestUci, bestSan: m.bestSan, playedUci: m.playedUci, severity: m.severity } : null;
+    return m ? { bestUci: m.bestUci, bestSan: m.bestSan, playedUci: m.playedUci, severity: m.severity, bestLine: m.bestLine, punishLine: m.punishLine } : null;
   },
   get lamp() { return getLampControl(); },
   setLamp(t) { setLampControl(t); },

@@ -85,7 +85,8 @@ js/host.js     the pawn host: bob, blink, gaze, lean, brow reactions
 js/paper.js    the parchment: game list, slide-in, raycast row-pick, pager
 js/cards.js    the mistake-card deck + the chest (2D diagram cards, fling-to-chest)
 js/flipbutton.js  the wired 3D "FLIP" button
-js/store.js    localStorage (remembered name, chest tally) + mistake tagging
+js/openings.js the opening book (longest-prefix match on SAN)
+js/store.js    localStorage (remembered name, chest tally, shaker level) + mistake tagging
 js/ui.js       thin HTML overlays: typewriter speech + 8-bit voice, sparkles, promotion
 js/tween.js    promise-based rAF tweens (FAST flag for deterministic tests)
 js/chesscom.js / engine.js / analysis.js / sound.js   API, Stockfish, analysis, synth

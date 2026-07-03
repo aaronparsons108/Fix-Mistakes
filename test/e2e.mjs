@@ -112,6 +112,7 @@ try {
   await page.waitForFunction(() => window.__rmc.results[0] != null, { timeout: 30000 });
   check(await page.evaluate(() => window.__rmc.results[0] === 'first'), 'raycast click-to-move solves the best move first try');
   check(await page.evaluate(() => window.__rmc.cardSolved === true), 'solving the position reveals the green best-move arrow on its card');
+  check(await page.evaluate(() => document.getElementById('hud-engine-line').textContent.includes('idea')), 'the engine explains the idea behind the best move');
   await page.screenshot({ path: SHOTS + 'cabin-4-correct.png' });
 
   // ← retries even after solving, without re-scoring

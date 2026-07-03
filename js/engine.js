@@ -92,7 +92,8 @@ export class Engine {
           last = {
             cp: cp ? parseInt(cp[1], 10) : null,
             mate: mate ? parseInt(mate[1], 10) : null,
-            pv: pv ? pv[1].split(' ') : [],
+            // this build appends "bmc <n>" after the pv — keep only real UCI moves
+            pv: pv ? pv[1].split(' ').filter((u) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(u)) : [],
           };
         } else if (line.startsWith('bestmove')) {
           clearTimeout(timer);
