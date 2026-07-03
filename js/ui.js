@@ -56,23 +56,36 @@ export function sparkle(x, y, kind = 'ember', { count = 22, power = 1 } = {}) {
 let speechTimer = null, speech = null;
 const TYPE_MS = 26; // ms per revealed character
 
+// Returns a promise that resolves once the line has finished typing out (not
+// waiting for `hold`) — callers that need to sequence something after the host
+// stops talking (e.g. opening a modal, so it doesn't blur a half-typed line
+// behind its glass) can `await speak(...)`; fire-and-forget callers just don't.
 export function speak(html, { hold = 0, mood = 0 } = {}) {
   const box = $('host-speech'), el = $('speech-text');
   box.hidden = false;
   box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
-  clearTimeout(speechTimer); speech = null;
+  clearTimeout(speechTimer);
+  if (speech && !speech.done) speech.resolve?.();   // don't strand the previous line's promise
+  speech = null;
 
-  if (FAST.on) { el.innerHTML = html; if (hold > 0) speechTimer = setTimeout(() => { box.hidden = true; }, hold); return; }
+  if (FAST.on) {
+    el.innerHTML = html;
+    if (hold > 0) speechTimer = setTimeout(() => { box.hidden = true; }, hold);
+    return Promise.resolve();
+  }
 
   el.innerHTML = '';
   // mood: -1 low/displeased … +1 bright — shifts the blip pitch a little
-  speech = { html, i: 0, shown: '', blips: 0, acc: 0, hold, held: false, mood, pauses: 0 };
+  return new Promise((resolve) => {
+    speech = { html, i: 0, shown: '', blips: 0, acc: 0, hold, held: false, mood, pauses: 0, done: false, resolve };
+  });
 }
 
 // Advance the typewriter; call once per animation frame with the frame's dt (s).
 export function tickSpeech(dtSeconds) {
   const s = speech; if (!s) return;
   if (s.i >= s.html.length) {
+    if (!s.done) { s.done = true; s.resolve?.(); }
     if (s.hold > 0 && !s.held) { s.held = true; speechTimer = setTimeout(() => { $('host-speech').hidden = true; }, s.hold); }
     return;
   }
@@ -98,6 +111,12 @@ export function tickSpeech(dtSeconds) {
 }
 export function hush() { speech = null; $('host-speech').hidden = true; }
 
+// Reveal a modal (any .modal element) cleanly: every modal has backdrop-filter
+// blur, which blurs whatever is still on screen behind it — including a host
+// line that's still mid-typewriter. Hush first so nothing half-typed and
+// unreadable gets frozen behind the glass.
+export function openModal(el) { hush(); el.hidden = false; }
+
 export function toast(msg, ms = 4200) {
   const t = $('toast');
   t.textContent = msg; t.hidden = false;
@@ -115,7 +134,7 @@ export function askPromotion(color) {
       b.addEventListener('click', () => { modal.hidden = true; resolve(type); });
       box.appendChild(b);
     }
-    modal.hidden = false;
+    openModal(modal);
     modal.onclick = (e) => { if (e.target === modal) { modal.hidden = true; resolve(null); } };
   });
 }

@@ -62,7 +62,14 @@ public chess.com API (CORS-enabled, no key) for your games.
 - **No build step, no framework, no backend.** Vanilla ES modules + WebGL.
 - `lib/three/` — Three.js r184 (core ESM) + the GLTFLoader addon, used to
   build the scene (candlelit cabin, table, the pawn host, parchment) and to
-  load the chess pieces.
+  load the chess pieces. Vendored **pre-minified** (three.core.min.js /
+  three.module.js / the addon files, all official/esbuild output — same
+  source, same MIT license, just smaller) since this is the largest chunk of
+  the critical-path JS; `index.html` also `modulepreload`s the deep parts of
+  the import graph (three.core, GLTFLoader + its two utils, chess.js) and
+  `preload`s the piece models + first-paint fonts, so a slow connection
+  doesn't wait through a multi-hop ES-module discovery waterfall on top of the
+  download itself.
 - `assets/models/*.glb` — the chess piece models, loaded with GLTFLoader and
   painted ivory/dark at runtime. Source: github.com/ordamari/3d-chess (see
   `assets/models/SOURCE.txt`; the upstream repo has no explicit license, so

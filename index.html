@@ -16,6 +16,34 @@
 <meta name="twitter:image" content="https://raw.githubusercontent.com/aaronparsons108/ReviseMyChess/main/assets/og.jpg" />
 <link rel="stylesheet" href="css/style.css" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='82' font-size='80'>♟</text></svg>" />
+
+<!-- Flatten the ES-module import waterfall: these are 2-3 hops deep in the
+     dependency graph (app.js → scene/board3d/pieces → three → three.core, or
+     → GLTFLoader → its utils), so without a hint the browser only discovers
+     them after fetching+parsing everything above them. modulepreload starts
+     all of them in parallel with the HTML parse instead — the difference is
+     several serial round-trips on a slow/high-latency connection. -->
+<link rel="modulepreload" href="lib/three/three.core.min.js" />
+<link rel="modulepreload" href="lib/three/three.module.js" />
+<link rel="modulepreload" href="lib/three/addons/loaders/GLTFLoader.js" />
+<link rel="modulepreload" href="lib/three/addons/utils/BufferGeometryUtils.js" />
+<link rel="modulepreload" href="lib/three/addons/utils/SkeletonUtils.js" />
+<link rel="modulepreload" href="lib/chess.js" />
+<!-- the boot title + first speech line read from these immediately -->
+<link rel="preload" href="assets/fonts/im-fell-english.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="assets/fonts/im-fell-english-italic.woff2" as="font" type="font/woff2" crossorigin />
+
+<!-- the six piece models: loadPieces() doesn't call GLTFLoader until several
+     import-hops into boot(), so without this the fetch for these ~480KB
+     doesn't even start until well after the HTML has parsed. Preloading them
+     declaratively lets the browser fetch all six in parallel from the top. -->
+<link rel="preload" href="assets/models/pawn.glb" as="fetch" crossorigin />
+<link rel="preload" href="assets/models/knight.glb" as="fetch" crossorigin />
+<link rel="preload" href="assets/models/bishop.glb" as="fetch" crossorigin />
+<link rel="preload" href="assets/models/rook.glb" as="fetch" crossorigin />
+<link rel="preload" href="assets/models/queen.glb" as="fetch" crossorigin />
+<link rel="preload" href="assets/models/king.glb" as="fetch" crossorigin />
+
 <script type="importmap">
 { "imports": { "three": "./lib/three/three.module.js", "three/addons/": "./lib/three/addons/" } }
 </script>

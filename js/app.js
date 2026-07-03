@@ -19,7 +19,7 @@ import { loadPieces } from './pieces.js';
 import { FAST, wait, tween } from './tween.js';
 import { sounds, toggleMute, isMuted, startAmbience } from './sound.js';
 import { nameOpening } from './openings.js';
-import { floatLabel, sparkle, speak, hush, toast, askPromotion, tickSpeech } from './ui.js';
+import { floatLabel, sparkle, speak, hush, toast, askPromotion, tickSpeech, openModal } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -201,8 +201,8 @@ async function boot() {
   $('boot').classList.add('gone');
   await wait(1400);            // the veil fades as the torches catch…
   setPhase('START');
-  speak('Welcome to the cabin. Shall we <span class="q">study</span> your games, or test your <span class="q">mind</span>?');
-  $('start-overlay').hidden = false;
+  await speak('Welcome to the cabin. Shall we <span class="q">study</span> your games, or test your <span class="q">mind</span>?');
+  openModal($('start-overlay'));
 }
 boot();
 
@@ -275,7 +275,7 @@ $('btn-rename').addEventListener('click', openRename);
 $('btn-modes').addEventListener('click', () => {
   if (!state.username) return;
   $('nav-name-label').textContent = state.username;
-  $('nav-overlay').hidden = false;
+  openModal($('nav-overlay'));   // hushes first — whatever the host was mid-saying won't blur behind it
 });
 $('nav-close').addEventListener('click', () => { $('nav-overlay').hidden = true; });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('nav-overlay').hidden = true; });
@@ -314,7 +314,7 @@ async function doFetch(name) {
     state.blindSkill = eloToSkill(userElo());   // needed by the mental modes from any track
     $('username-panel').hidden = true;
     $('btn-rename').hidden = false; $('btn-modes').hidden = false;
-    if (state.track === 'mental') showMentalPicker();
+    if (state.track === 'mental') await showMentalPicker();
     else await showGames(LINES.pickGame(name));
   } catch (ex) {
     setPhase('ASK_USERNAME');
@@ -353,8 +353,9 @@ async function pickGame(i) {
   state.game = game;
   sounds.tick();
   setPhase('CHOOSE_MODE');
-  speak(`A game against <span class="q">${escapeText(game.opponent)}</span>. How shall we look at it?`);
-  $('mode-overlay').hidden = false;
+  await speak(`A game against <span class="q">${escapeText(game.opponent)}</span>. How shall we look at it?`);
+  if (state.phase !== 'CHOOSE_MODE') return;   // a fast click elsewhere moved us on already
+  openModal($('mode-overlay'));
 }
 
 $('btn-mode-back').addEventListener('click', () => {
@@ -422,16 +423,19 @@ async function backToGames(line) {
 function userElo() { const g = state.games && state.games[0]; return (g && g.userRating) || 800; }
 function eloToSkill(elo) { return Math.max(0, Math.min(20, Math.round((elo - 500) / 95))); }
 
-function showMentalPicker() {
+async function showMentalPicker() {
   setPhase('MENTAL_MODE');
-  speak(`I'll play to your level — around <span class="q">${userElo()}</span>. Now, choose your torment.`);
-  $('mental-overlay').hidden = false;
+  await speak(`I'll play to your level — around <span class="q">${userElo()}</span>. Now, choose your torment.`);
+  if (state.phase !== 'MENTAL_MODE') return;   // rename/back happened while he was still talking
+  openModal($('mental-overlay'));
 }
 $('btn-mental-shaker').addEventListener('click', () => { $('mental-overlay').hidden = true; startShaker(); });
 $('btn-mental-blind').addEventListener('click', () => { $('mental-overlay').hidden = true; startBlindfold(); });
-$('btn-mental-back').addEventListener('click', () => {
-  $('mental-overlay').hidden = true; setPhase('START'); $('start-overlay').hidden = false;
-  speak('Very well. <span class="q">Study</span>, or your <span class="q">mind</span>?');
+$('btn-mental-back').addEventListener('click', async () => {
+  $('mental-overlay').hidden = true; setPhase('START');
+  await speak('Very well. <span class="q">Study</span>, or your <span class="q">mind</span>?');
+  if (state.phase !== 'START') return;
+  openModal($('start-overlay'));
 });
 
 function showChallenge(html, { retry = false, peek = false } = {}) {
