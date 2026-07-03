@@ -253,6 +253,7 @@ function teardownCurrent() {
   $('review-hud').hidden = true; $('evalbar').hidden = true;
   $('mode-overlay').hidden = true; $('mental-overlay').hidden = true;
   $('blindfold').hidden = true; $('challenge-hud').hidden = true;
+  $('analyze-bar').hidden = true;
   hush();
 }
 
@@ -370,9 +371,20 @@ async function startFixMistakes() {
   await paper.slideOut();
   speak(LINES.studying);
   flareCandles();
+  // a silent burning-wick progress strip — no chatty updates, just the wick
+  const bar = $('analyze-bar'), fill = $('analyze-fill'), flame = $('analyze-bar').querySelector('.ab-flame');
+  fill.style.width = '0%'; flame.style.left = '0%';
+  bar.hidden = false;
+  const onProgress = (done, total) => {
+    const pct = Math.min(100, Math.round((done / Math.max(total, 1)) * 100));
+    fill.style.width = pct + '%'; flame.style.left = pct + '%';
+  };
+  const session = ++state.session;   // switching modes mid-analysis abandons this read
   try {
     await state.engine.init();
-    const { moments } = await analyzeGame(game, state.engine);
+    const { moments } = await analyzeGame(game, state.engine, { onProgress });
+    bar.hidden = true;
+    if (session !== state.session || state.phase !== 'ANALYZING') return;
     if (!moments.length) {
       speak('No real mistakes in this one. Pick another.');
       backToGames();
@@ -380,6 +392,8 @@ async function startFixMistakes() {
     }
     startQuiz(moments);
   } catch (ex) {
+    bar.hidden = true;
+    if (session !== state.session || state.phase !== 'ANALYZING') return;
     toast('The reading failed: ' + (ex.message || ex));
     backToGames();
   }

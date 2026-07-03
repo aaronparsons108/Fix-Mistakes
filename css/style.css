@@ -271,6 +271,32 @@ body {
 .branch-tag { font-family: 'Fell', serif; font-style: italic; font-size: 13px; color: #fff; background: #9a4a2a; border-radius: 3px; padding: 1px 7px; letter-spacing: 0; vertical-align: middle; }
 #review-hud .link-btn { position: absolute; top: 8px; right: 12px; margin: 0; }
 
+/* ── analysis progress: the burning wick ─────────────── */
+.analyze-bar {
+  position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
+  width: min(380px, 74vw); z-index: 35; text-align: center;
+}
+.ab-track {
+  position: relative; height: 5px; border-radius: 3px;
+  background: rgba(216,198,154,0.16); border: 1px solid rgba(150,110,60,0.35);
+}
+.ab-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+  border-radius: 3px; background: linear-gradient(90deg, #7a5a2c, #e0a04a);
+  box-shadow: 0 0 10px rgba(224,160,74,0.55);
+  transition: width .45s ease;
+}
+.ab-flame {
+  position: absolute; top: -19px; left: 0; font-size: 14px;
+  transform: translateX(-50%); transition: left .45s ease;
+  filter: drop-shadow(0 0 6px rgba(255,180,80,0.8));
+  animation: flameflick 1.4s ease-in-out infinite;
+}
+.ab-label {
+  margin-top: 9px; font-family: 'Typewriter', monospace; font-size: 12px;
+  letter-spacing: 2px; color: #9a7c4e;
+}
+
 /* ── blindfold mask (transient black wipe as it passes the POV) ─ */
 .blindfold {
   position: fixed; inset: 0; z-index: 45; pointer-events: none; opacity: 0;
