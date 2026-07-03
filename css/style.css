@@ -242,6 +242,7 @@ body {
 .mode-choices .ink-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 14px; font-size: 17px; }
 .ink-btn small { font-family: 'Fell', serif; font-size: 13px; opacity: 0.85; font-style: italic; letter-spacing: 0; text-transform: none; }
 .link-btn { background: none; border: none; color: #7a5a34; font-family: 'Typewriter', monospace; font-size: 13px; cursor: pointer; margin-top: 14px; }
+.emoji-icon { display: inline-block; vertical-align: middle; margin-right: 6px; line-height: 1; text-shadow: -1px -1px 0 #7a5a34, 1px -1px 0 #7a5a34, -1px  1px 0 #7a5a34, 1px  1px 0 #7a5a34;}
 .link-btn:hover { color: #c08030; text-decoration: underline; }
 
 /* ── simple-review HUD ───────────────────────────────── */
